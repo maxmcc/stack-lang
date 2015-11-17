@@ -1,0 +1,59 @@
+CIS 552 Project Proposal, Fall 2015
+Meyer Kizner (mkizner) and Max McCarthy (maxmcc)
+================================================
+
+We propose to implement a type-checker and interpreter for a statically typed,
+stack-oriented programming language of our own design. The features we are
+currently considering include primitive functions for stack manipulation and
+type conversion; primitive types including integers, Boolean values, and
+characters; variant types; linked lists (including strings, or lists of
+characters); and “quotations,” which encode compositions of functions as
+first-class values, in the vein of anonymous functions in other languages. We
+are hoping to implement a type-checking phase (separate from the interpreter)
+which performs ML-style type inference with parametric polymorphism.
+
+Because our language will be relatively minimalistic, we expect typical use
+cases to be small programs that illustrate the unique paradigm of stack-oriented
+languages. Some examples include RPN arithmetic, and simple recursive procedures
+such as calculating Fibonacci numbers and quicksort. We expect also to build a
+compact standard library of useful functions.
+
+Since we are dividing the execution of a program into two phases (type checking
+and evaluation), we will need to structure those components as distinct modules.
+In addition to the type checker and interpreter, we will be writing a parser
+using a combinator library, such as Parsec. The separation of concerns between
+these three steps will form the basis of the architecture of our project.
+
+Much of the design of this project will be concentrated on designing the
+programming language itself. Its syntax and semantics will likely be inspired by
+other stack-oriented languages such as Forth, PostScript, and Joy, as well as
+more traditional ML-style functional languages, including OCaml and Haskell.
+
+An additional design aspect will be the Haskell representation of our language’s
+AST and types. We will explore the use of GADTs to encode the minimum number of
+stack arguments which a function consumes as input and produces as output. For
+instance, the “plus” operation would require a stack of size n >= 2, and result
+in a stack of size n - 1. This might be part of a function’s type in addition to
+information about the data types it uses.
+
+We will focus on unit-testing the various modules of our interpreter to ensure
+their correctness. We will use HUnit to compare our interpreter’s output for
+small, valid programs against our own expected output. Though it might be
+possible to generate arbitrary ASTs for our language, property-based testing in
+general will be difficult in the face of polymorphism.
+
+We expect the work to break down approximately as follows:
+
+  1. Language design, including specification of the syntax, semantics, and
+     type system. (8 hours)
+
+  2. Implementation of a Parsec-based parser. (4 hours)
+
+  3. Implementation of a type checker and inference system. (10 hours)
+
+  4. Implementation of an evaluation function. (10 hours)
+
+  5. Testing the language, including writing sample programs. (8 hours)
+
+  6. Refactoring as necessary. (5 hours)
+
