@@ -7,11 +7,11 @@ import Expressions
 import Data.Maybe (fromJust)
 
 import Text.Parsec.String (Parser)
-import Text.Parsec.Prim ((<|>), parserZero, many)
+import Text.Parsec.Prim ((<|>), parserZero, many, runParser)
 import Text.Parsec.Language (emptyDef)
 import Text.Parsec.Token
 import Text.Parsec.Char (letter, alphaNum, char)
-import Text.Parsec.Combinator (eof)
+import Text.Parsec.Error (ParseError)
 
 primitives :: [(String, Function)]
 primitives = stackPrimitives ++ listPrimitives
@@ -47,4 +47,10 @@ parser :: Parser Function
 parser = do whiteSpace lexer
             fs <- many (lexeme lexer tokenParser)
             return $ Prelude.foldl (flip (.)) id fs
+
+
+-- Quick and dirty testing function
+run :: String -> Either ParseError [StackValue]
+run s = runParser parser () "" s
+        >>= \f -> return $ f []
 

@@ -1,0 +1,46 @@
+CIS 552 Project Milestone, Fall 2015
+Meyer Kizner (mkizner) and Max McCarthy (maxmcc)
+================================================
+
+We have spent a lot of time on our language design so far, particularly focusing
+on the type system and how we can perform type inference (or maybe just type
+reconstruction). We've explored several different typed stack-oriented languages
+so far, including Kitten (http://kittenlang.org), which looks quite similar to
+what we had envisioned making.
+
+The biggest challenge in writing a statically-typed stack-oriented language
+supporting first-class functions is the concept of "stack polymorphism", where
+functions such as (+) must be polymorphic in the parts of the stack they don't
+use. This makes type inference quite difficult, and we're still looking into
+strategies for implementing inference as well as finalizing the type system
+itself. One counterintuitive consequence of our current design is that literals
+such as "3" are modeled as functions from stacks to stacks which push their
+denoted value onto the stack. For instance, the type of "3" is:
+
+    forall (s : stack),  s -> s int
+
+where the juxtaposition of `s` and `int` denotes some stack whose top element is
+of type int.
+
+So far, we've defined several datatypes for our AST (Expressions.hs) and type
+system (Types.hs). These have already undergone several iterations while we've
+played with different language semantics. In addition to these, we have
+implemented a lexer and parser (Parser.hs) for the entire syntax of the
+language, (excluding certain builtins and operators). Though no typechecking is
+yet taking place, we have a quick-and-dirty `run` function in Parser.hs which
+we've used to test our parser.
+
+Our testing has only really been ad-hoc, but we plan on writing concrete unit
+tests once our language's design is more stable (and after a couple more
+iterations' worth of work on the AST and type system).
+
+We've used the Parsec library to implement a lexer and parser similar to the
+monadic parser we saw in class. We have also explored using GADTs to implement a
+very simple kind system, though the code (in Types.hs) is currently commented
+out, since we aren't yet sure if we'll pursue this approach.
+
+Though our interpreter "works" in its current state, we realized that modeling
+object-language functions as Haskell functions will be problematic for many
+reasons. Primarily, it will make it difficult to cleanly separate parsing,
+typechecking, and evaluation into different phases.
+
