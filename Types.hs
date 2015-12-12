@@ -1,48 +1,52 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
+{-# LANGUAGE GADTs, DataKinds, KindSignatures, FlexibleInstances #-}
 
 module Types where
 
-import Data.Set (Set)
--- import qualified Data.Set as Set
-
-{-
-
 data Kind
-  = Proper
-  | Stack
+  = StackKind
+  | ValueKind
+    deriving (Eq, Ord, Show)
 
 data Value
   = IntVal Int
   | BoolVal Bool
+  | ListVal [Value]
+  | QuotVal [Value]
+  | Builtin String
+    deriving (Eq, Ord, Show)
 
-data Type (a :: Kind) where
-  Value :: Value -> Type 'Proper
-  List  :: Type 'Proper -> Type 'Proper
-  Func  :: Type 'Stack -> Type 'Stack -> Type 'Proper
-  Stack :: Type 'Stack -> Type 'Proper -> Type 'Stack
-  Empty :: Type 'Stack
+data Type (k :: Kind) where
+  VIntTy  :: Type 'ValueKind
+  VBoolTy :: Type 'ValueKind
+  VListTy :: Type 'ValueKind -> Type 'ValueKind
+  VFuncTy :: Type 'StackKind -> Type 'StackKind -> Type 'ValueKind
+  VVarTy  :: Char -> Type 'ValueKind
+  SConsTy :: Type 'StackKind -> Type 'ValueKind -> Type 'StackKind
+  SAnyTy  :: Type 'StackKind
 
--}
+instance Show (Type 'ValueKind) where
+  show (VVarTy c)                  = ['\'', c]
+  show VIntTy                      = "int"
+  show VBoolTy                     = "bool"
+  show (VListTy t)                 = show t ++ " list"
+  show (VFuncTy t u)               = show t ++ " -> " ++ show u
 
-data Value =
-    IntVal Int
-  | BoolVal Bool
+instance Show (Type 'StackKind) where
+  show (SConsTy s v@(VFuncTy _ _)) = show s ++ ", (" ++ show v ++ ")"
+  show (SConsTy s v)               = show s ++ ", " ++ show v
+  show SAnyTy                      = "..."
 
-data ProperType =
-    Value Value
-  | List ProperType
-  | Function StackType StackType
+instance Eq (Type 'ValueKind) where
+  VIntTy == VIntTy = True
+  VBoolTy == VBoolTy = True
+  VListTy t == VListTy u = t == u
+  VFuncTy t u == VFuncTy v w = (t, u) == (v, w)
+  VVarTy a == VVarTy b = a == b
+  _ == _ = False
 
-data StackType =
-    Empty
-  | Push StackType ProperType
-
-
-data TypeId = String
-
-data Quant = Quant { properVars :: Set TypeId, stackVars :: Set TypeId }
-
-data TypeScheme =
-    Mono ProperType
-  | Forall Quant ProperType
+instance Eq (Type 'StackKind) where
+  SConsTy s v == SConsTy t w = (s, v) == (t, w)
+  SAnyTy == SAnyTy = True
+  _ == _ = False
 
