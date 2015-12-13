@@ -2,8 +2,6 @@
 
 module Types where
 
-import Text.Printf
-
 data Kind
   = StackKind
   | ValueKind
@@ -28,7 +26,7 @@ data ValueType
 data Stack = S Char [ValueType]
   deriving (Eq)
 
-data FuncType = F Char Stack Stack
+data FuncType = F Stack Stack
   deriving (Eq)
 
 instance Show ValueType where
@@ -42,5 +40,5 @@ instance Show Stack where
   show (S a s) = a : " ++ " ++ show s
 
 instance Show FuncType where
-  show (F a s t) =
-    printf "forall %c, %s -> %s" a (show s) (show t)
+  show (F s t) = show s ++ " -> " ++ show t
+
