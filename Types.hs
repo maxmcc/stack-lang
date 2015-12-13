@@ -50,3 +50,6 @@ instance Eq (Type 'StackKind) where
   SAnyTy == SAnyTy = True
   _ == _ = False
 
+type StackFunc = (Type 'StackKind, Type 'StackKind)
+
+

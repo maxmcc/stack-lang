@@ -31,7 +31,11 @@ runTC m = evalStateT (runWriterT m) 'a'
 data Constraint
   = VEqual (Type 'ValueKind) (Type 'ValueKind)
   | SEqual (Type 'StackKind) (Type 'StackKind)
-    deriving (Show, Eq)
+    deriving (Eq)
+
+instance Show Constraint where
+  show (VEqual s t) = show s ++ " :~: " ++ show t
+  show (SEqual s t) = show s ++ " :~: " ++ show t
 
 class Constrainable k where
   equate :: Type k -> Type k -> TC ()
@@ -46,8 +50,6 @@ instance Constrainable 'ValueKind where
 
 
 -- type checking and inference monad
-
-type StackFunc = (Type 'StackKind, Type 'StackKind)
 
 type Context = Map String StackFunc
 

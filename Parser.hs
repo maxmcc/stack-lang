@@ -2,19 +2,14 @@
 
 module Parser where
 
-import Expressions
-
-import Data.Maybe (fromJust)
+import Terms
 
 import Text.Parsec.String (Parser)
+import Text.Parsec.Error (ParseError)
 import Text.Parsec.Prim ((<|>), parserZero, many, runParser)
 import Text.Parsec.Language (emptyDef)
 import Text.Parsec.Token
 import Text.Parsec.Char (letter, alphaNum, char)
-import Text.Parsec.Error (ParseError)
-
-primitives :: [(String, Function)]
-primitives = stackPrimitives ++ listPrimitives
 
 lexer :: TokenParser ()
 lexer = makeTokenParser langDef
@@ -33,24 +28,18 @@ langDef = emptyDef
   , reservedOpNames = ["+", "*", "/", "-", "%"]
   }
 
-tokenParser :: Parser Function
-tokenParser = (push . IntVal . fromIntegral) <$> integer lexer
-          <|> (reserved lexer "true" *> pure (push $ BoolVal True))
-          <|> (reserved lexer "false" *> pure (push $ BoolVal False))
-          <|> flip (fromJust .: lookup) primitives <$> identifier lexer
-          <|> (push . FunVal) <$> braces lexer parser
+tokenParser :: Parser Term
+tokenParser = (PushIntTerm . fromIntegral) <$> integer lexer
+          <|> (reserved lexer "true" *> pure (PushBoolTerm True))
+          <|> (reserved lexer "false" *> pure (PushBoolTerm False))
+          <|> BuiltinTerm <$> identifier lexer
+          <|> PushFuncTerm <$> braces lexer parser
 
-(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(.:) = (.) . (.)
-
-parser :: Parser Function
+parser :: Parser Term
 parser = do whiteSpace lexer
             fs <- many (lexeme lexer tokenParser)
-            return $ Prelude.foldl (flip (.)) id fs
+            return $ Prelude.foldl CatTerm IdTerm fs
 
-
--- Quick and dirty testing function
-run :: String -> Either ParseError [StackValue]
-run s = runParser parser () "" s
-        >>= \f -> return $ f []
+run :: String -> Either ParseError Term
+run = runParser parser () ""
 

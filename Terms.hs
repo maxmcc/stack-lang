@@ -3,10 +3,12 @@
 
 module Terms where
 
+type Builtin = String
+
 data Term
   = IdTerm
   | CatTerm Term Term
-  | BuiltinTerm String
+  | BuiltinTerm Builtin
   | PushIntTerm Int
   | PushBoolTerm Bool
   | PushFuncTerm Term
