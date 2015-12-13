@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
-{-# LANGUAGE GADTs, DataKinds, KindSignatures, FlexibleInstances #-}
 
 module Types where
+
+import Text.Printf
 
 data Kind
   = StackKind
@@ -16,40 +17,30 @@ data Value
   | Builtin String
     deriving (Eq, Ord, Show)
 
-data Type (k :: Kind) where
-  VIntTy  :: Type 'ValueKind
-  VBoolTy :: Type 'ValueKind
-  VListTy :: Type 'ValueKind -> Type 'ValueKind
-  VFuncTy :: Type 'StackKind -> Type 'StackKind -> Type 'ValueKind
-  VVarTy  :: Char -> Type 'ValueKind
-  SConsTy :: Type 'StackKind -> Type 'ValueKind -> Type 'StackKind
-  SAnyTy  :: Type 'StackKind
+data ValueType
+  = VIntTy
+  | VBoolTy
+  | VListTy ValueType
+  | VFuncTy FuncType
+  | VVarTy Char
+    deriving (Eq)
 
-instance Show (Type 'ValueKind) where
-  show (VVarTy c)                  = ['\'', c]
-  show VIntTy                      = "int"
-  show VBoolTy                     = "bool"
-  show (VListTy t)                 = show t ++ " list"
-  show (VFuncTy t u)               = show t ++ " -> " ++ show u
+data Stack = S Char [ValueType]
+  deriving (Eq)
 
-instance Show (Type 'StackKind) where
-  show (SConsTy s v@(VFuncTy _ _)) = show s ++ ", (" ++ show v ++ ")"
-  show (SConsTy s v)               = show s ++ ", " ++ show v
-  show SAnyTy                      = "..."
+data FuncType = F Char Stack Stack
+  deriving (Eq)
 
-instance Eq (Type 'ValueKind) where
-  VIntTy == VIntTy = True
-  VBoolTy == VBoolTy = True
-  VListTy t == VListTy u = t == u
-  VFuncTy t u == VFuncTy v w = (t, u) == (v, w)
-  VVarTy a == VVarTy b = a == b
-  _ == _ = False
+instance Show ValueType where
+  show VIntTy      = "int"
+  show VBoolTy     = "bool"
+  show (VListTy t) = show t ++ " list"
+  show (VFuncTy f) = show f
+  show (VVarTy c)  = ['\'', c]
 
-instance Eq (Type 'StackKind) where
-  SConsTy s v == SConsTy t w = (s, v) == (t, w)
-  SAnyTy == SAnyTy = True
-  _ == _ = False
+instance Show Stack where
+  show (S a s) = a : " ++ " ++ show s
 
-type StackFunc = (Type 'StackKind, Type 'StackKind)
-
-
+instance Show FuncType where
+  show (F a s t) =
+    printf "forall %c, %s -> %s" a (show s) (show t)

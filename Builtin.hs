@@ -9,16 +9,9 @@ import Terms
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-infixl 5 -:
-(-:) :: Type 'StackKind -> Type 'ValueKind -> Type 'StackKind
-(-:) = SConsTy
-
-infixl 4 ~>
-(~>) :: Type 'StackKind -> Type 'StackKind -> StackFunc
-(~>) = (,)
-
-builtinTypes :: Map Builtin StackFunc
+builtinTypes :: Map Builtin FuncType
 builtinTypes = Map.fromList
-  [ ("plus", SAnyTy -: VIntTy -: VIntTy ~> SAnyTy -: VIntTy)
+  [ ("plus", F 'A' (S 'B' [VIntTy, VIntTy]) (S 'B' [VIntTy]))
+  , ("apply", F 'A' (S 'B' [VFuncTy (F 'D' (S 'B' []) (S 'C' []))]) (S 'C' []))
   ]
 

@@ -6,8 +6,10 @@ module Inference where
 import Types
 import Terms
 
+import Data.Char (toUpper)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Text.Printf
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
@@ -20,61 +22,70 @@ type TC a =
   (Either String))
   a
 
-fresh :: TC TypeVariable
-fresh = state ((,) <*> succ)
+freshVVar :: TC TypeVariable
+freshVVar = state ((,) <*> succ)
+
+freshSVar :: TC TypeVariable
+freshSVar = toUpper <$> state ((,) <*> succ)
 
 runTC :: TC a -> Either String (a, [Constraint])
-runTC m = evalStateT (runWriterT m) 'a'
+runTC m = evalStateT (runWriterT m) 'm'
 
 --
 
 data Constraint
-  = VEqual (Type 'ValueKind) (Type 'ValueKind)
-  | SEqual (Type 'StackKind) (Type 'StackKind)
+  = VEqual ValueType ValueType
+  | SEqual Char Stack Char Stack
     deriving (Eq)
 
 instance Show Constraint where
-  show (VEqual s t) = show s ++ " :~: " ++ show t
-  show (SEqual s t) = show s ++ " :~: " ++ show t
+  show (VEqual s t)     = show s ++ " :~: " ++ show t
+  show (SEqual a s b t) =
+    printf "forall %c, %s :~: forall %c, %s" a (show s) b (show t)
 
-class Constrainable k where
-  equate :: Type k -> Type k -> TC ()
+equateVTy :: ValueType -> ValueType -> TC ()
+equateVTy t1 t2 | t1 == t2  = return ()
+                | otherwise = tell [VEqual t1 t2]
 
-instance Constrainable 'StackKind where
-  equate s t | s == t    = return ()
-             | otherwise = tell [SEqual s t]
-
-instance Constrainable 'ValueKind where
-  equate s t | s == t    = return ()
-             | otherwise = tell [VEqual s t]
-
+equateSTy :: Char -> Stack -> Char -> Stack -> TC ()
+equateSTy a s b t | (a, s) == (b, t) = return ()
+                  | otherwise        = tell [SEqual a s b t]
 
 -- type checking and inference monad
 
-type Context = Map String StackFunc
+type Context = Map String FuncType
 
-inferType :: Context -> Term -> TC StackFunc
+inferType :: Context -> Term -> TC FuncType
 
-inferType _ IdTerm = return (SAnyTy, SAnyTy)
+inferType _ IdTerm = do a <- freshSVar
+                        b <- freshSVar
+                        return $ F a (S b []) (S b [])
 
 inferType c (CatTerm t u) =
-  do (t1, u1) <- inferType c t
-     (t2, u2) <- inferType c u
-     equate t2 u1
-     return (t1, u2)
+  do F a1 (S b1 t1) (S c1 u1) <- inferType c t
+     F a2 (S b2 t2) (S c2 u2) <- inferType c u
+     d <- freshSVar
+     equateSTy a1 (S c1 u1) a2 (S b2 t2)
+     equateSTy a1 (S b1 t1) d (S b1 t1)
+     equateSTy a2 (S c2 u2) d (S c2 u2)
+     return $ F d (S b1 t1) (S c2 u2)
 
 inferType c (BuiltinTerm s) =
   case Map.lookup s c of
     Just t  -> return t
     Nothing -> throwError $ "Unbound identifier: " ++ s
 
-inferType _ (PushIntTerm _) =
-  return (SAnyTy, SConsTy SAnyTy VIntTy)
+inferType _ (PushIntTerm _) = do a <- freshSVar
+                                 b <- freshSVar
+                                 return $ F a (S b []) (S b [VIntTy])
 
-inferType _ (PushBoolTerm _) =
-  return (SAnyTy, SConsTy SAnyTy VBoolTy)
+inferType _ (PushBoolTerm _) = do a <- freshSVar
+                                  b <- freshSVar
+                                  return $ F a (S b []) (S b [VBoolTy])
 
 inferType c (PushFuncTerm term) =
-  do (t, u) <- inferType c term
-     return (SAnyTy, SConsTy SAnyTy (VFuncTy t u))
+  do t <- inferType c term
+     a <- freshSVar
+     b <- freshSVar
+     return $ F a (S b []) (S b [VFuncTy t])
 
