@@ -5,11 +5,14 @@ import Inference
 import Builtin
 import Parser
 
+import System.IO
+import Control.Monad (when)
+
 main :: IO ()
 main =
-  do putStr "%> "
-     l <- getLine
-     let parse = run l
+  do hSetBuffering stdin LineBuffering
+     putStr "%> " >> hFlush stdout
+     parse <- run <$> getLine
      case parse of
        Right terms ->
          case runTC $ inferType builtinTypes terms of

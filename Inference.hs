@@ -5,32 +5,38 @@ module Inference where
 
 import Types
 import Terms
+import Builtin
 
-import Data.Char (toUpper)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
 
-type TypeVariable = Char
+type TypeVariable = String
 
 type TC a =
   WriterT [Constraint]
-  (StateT TypeVariable
+  (StateT Int
   (Either String))
   a
 
 freshVVar :: TC TypeVariable
-freshVVar = state ((,) <*> succ)
+freshVVar =
+  do i <- get
+     put $ succ i
+     return $ "t" ++ show i
 
 freshSVar :: TC TypeVariable
-freshSVar = toUpper <$> state ((,) <*> succ)
+freshSVar =
+  do i <- get
+     put $ succ i
+     return $ "s" ++ show i
 
 type FreshenTC a =
   StateT (Map TypeVariable TypeVariable)
   (WriterT [Constraint]
-  (StateT TypeVariable
+  (StateT Int
   (Either String)))
   a
 
@@ -79,7 +85,7 @@ freshen t =
      evalStateT (freshenSVarsFunc t') Map.empty
 
 runTC :: TC a -> Either String (a, [Constraint])
-runTC m = evalStateT (runWriterT m) 'm'
+runTC m = evalStateT (runWriterT m) 0
 
 --
 
@@ -112,13 +118,13 @@ inferType _ IdTerm =
 
 inferType c (CatTerm t u) =
   do F (S a1 t1) (S b1 u1) <- inferType c t
-     F (S a2 t2) (S b2 u2) <- inferType c u >>= freshen
+     F (S a2 t2) (S b2 u2) <- inferType c u
      equateSTy (S b1 u1) (S a2 t2)
      return $ F (S a1 t1) (S b2 u2)
 
 inferType c (BuiltinTerm s) =
   case Map.lookup s c of
-    Just t  -> return t
+    Just t  -> freshen t
     Nothing -> throwError $ "Unbound identifier: " ++ s
 
 inferType _ (PushIntTerm _) =
@@ -133,4 +139,25 @@ inferType c (PushFuncTerm term) =
   do t <- inferType c term
      a <- freshSVar
      return $ F (S a []) (S a [VFuncTy t])
+
+genConstraints :: Term -> Either String (FuncType, [Constraint])
+genConstraints = runTC . inferType builtinTypes
+
+---
+
+type SSubst = Map TypeVariable Stack
+type VSubst = Map TypeVariable ValueType
+
+substSVarsFunc :: SSubst -> FuncType -> FuncType
+substSVarsFunc s (F st1 st2) = undefined
+
+substSVarsValue :: SSubst -> ValueType -> ValueType
+substSVarsValue s t = undefined
+
+substVVarsFunc :: VSubst -> FuncType -> FuncType
+substVVarsFunc s t = undefined
+
+substVVarsValue :: VSubst -> ValueType -> ValueType
+substVVarsValue s t = undefined
+
 

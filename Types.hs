@@ -20,10 +20,10 @@ data ValueType
   | VBoolTy
   | VListTy ValueType
   | VFuncTy FuncType
-  | VVarTy Char
+  | VVarTy String
     deriving (Eq)
 
-data Stack = S Char [ValueType]
+data Stack = S String [ValueType]
   deriving (Eq)
 
 data FuncType = F Stack Stack
@@ -32,12 +32,12 @@ data FuncType = F Stack Stack
 instance Show ValueType where
   show VIntTy      = "int"
   show VBoolTy     = "bool"
-  show (VListTy t) = show t ++ " list"
+  show (VListTy t) = "list " ++ show t
   show (VFuncTy f) = show f
-  show (VVarTy c)  = ['\'', c]
+  show (VVarTy s)  = "'" ++ s
 
 instance Show Stack where
-  show (S a s) = a : " ++ " ++ show s
+  show (S a s) = a ++ " ++ " ++ show s
 
 instance Show FuncType where
   show (F s t) = show s ++ " -> " ++ show t
