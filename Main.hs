@@ -14,17 +14,10 @@ main =
      putStr "%> " >> hFlush stdout
      parse <- run <$> getLine
      case parse of
-       Right terms ->
-         case runTC $ inferType builtinTypes terms of
-           Right (t@(F l r), cs) ->
-             let Right (subst, vcs) = solveStack cs in
-             print t >> putStrLn "----------------" >>
-             mapM_ print cs >> putStrLn "----------------" >>
-             print (F (substSVars subst l) (substSVars subst r)) >>
-             main
-           Left s ->
-             putStrLn s >>
-             main
+       Right term ->
+         case typeInference term of
+           Right t -> print t >> main
+           Left s  -> putStrLn s >> main
        Left s ->
          print s >>
          main

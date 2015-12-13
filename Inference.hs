@@ -85,14 +85,17 @@ substVVars s t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v s)
 substVVarsStack :: VSubst -> Stack -> Stack
 substVVarsStack subst (S a s) = S a (map (substVVars subst) s)
 
-freshen :: Stack -> TC Stack
-freshen t =
-  do let vVars = Set.toList $ collectVVarsStack t
-         sVars = Set.toList $ collectSVars t
+freshen :: FuncType -> TC FuncType
+freshen (F s t) =
+  do let vVars = Set.toList $ collectVVarsStack s `Set.union` collectVVarsStack t
+         sVars = Set.toList $ collectSVars s `Set.union` collectSVars t
      newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
+     let s' = substVVarsStack (Map.fromList newVVars) s
      let t' = substVVarsStack (Map.fromList newVVars) t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
-     return $ substSVars (Map.fromList newSVars) t'
+     let s'' = substSVars (Map.fromList newSVars) s'
+     let t'' = substSVars (Map.fromList newSVars) t'
+     return $ F s'' t''
 
 runTC :: TC a -> Either String (a, [SConstraint])
 runTC m = evalStateT (runWriterT m) 0
@@ -131,9 +134,7 @@ inferType c (CatTerm t u) =
 
 inferType c (BuiltinTerm s) =
   case Map.lookup s c of
-    Just (F l r) -> do l' <- freshen l
-                       r' <- freshen r
-                       return $ F l' r'
+    Just t  -> freshen t
     Nothing -> throwError $ "Unbound identifier: " ++ s
 
 inferType _ (PushIntTerm _) =
@@ -166,13 +167,53 @@ mguStack (S a s) (S b t) | length s < length t = mguStack (S b t) (S a s)
   do tell $ zipWith VEqual (reverse s) (reverse t)
      lift $ stackVarAsgn b (S a (take (length s - length t) s))
 
-stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
-stackVarAsgn a s | a `Set.member` collectSVars s =
-  throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
-                 | otherwise = return $ Map.singleton a s
+mguValue :: ValueType -> ValueType -> WriterT [SConstraint] (Either String) VSubst
+mguValue VIntTy VIntTy = return Map.empty
+mguValue VBoolTy VBoolTy = return Map.empty
+mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
+mguValue (VFuncTy (F l1 r1)) (VFuncTy (F l2 r2)) =
+  -- TODO: unclear
+  do tell [SEqual l1 l2, SEqual r1 r2]
+     return Map.empty
+mguValue (VVarTy v) t = lift $ valueVarAsgn v t
+mguValue t (VVarTy v) = lift $ valueVarAsgn v t
+mguValue _ _          = throwError "structural mismatch"
 
-solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
-solveStack =
+stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
+stackVarAsgn a s
+  | a `Set.member` collectSVars s =
+      throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
+  | otherwise = return $ Map.singleton a s
+
+valueVarAsgn :: TypeVariable -> ValueType -> Either String VSubst
+valueVarAsgn a t
+  | t == VVarTy a = return Map.empty
+  | a `Set.member` collectVVars t =
+      throwError $ "occurs check fails: " ++ show a ++ " in " ++ show t
+  | otherwise = return $ Map.singleton a t
+
+solveStack :: SSubst -> [SConstraint] -> Either String (SSubst, [VConstraint])
+solveStack ss =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
           (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
-          return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])
+          return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (ss, [])
+
+solveValue :: VSubst -> [VConstraint] -> Either String (VSubst, [SConstraint])
+solveValue vs =
+  foldM (\(subst1, scs1) (VEqual t1 t2) -> do
+          (subst2, scs2) <- runWriterT $ mguValue (substVVars subst1 t1) (substVVars subst1 t2)
+          return (subst2 `afterVSubst` subst1, scs1 ++ scs2)) (vs, [])
+
+inferenceRound :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, VSubst)
+inferenceRound ss vs scs =
+  do (ss', vcs) <- solveStack ss scs
+     (vs', scs') <- solveValue vs vcs
+     if null scs'
+       then return (ss', vs')
+       else inferenceRound ss' vs' scs'
+
+typeInference :: Term -> Either String FuncType
+typeInference term =
+  do (F l r, scs) <- genConstraints term
+     (ss, vs) <- inferenceRound Map.empty Map.empty scs
+     return $ F (substSVars ss (substVVarsStack vs l)) (substSVars ss (substVVarsStack vs r))
