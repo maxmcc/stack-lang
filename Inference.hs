@@ -9,6 +9,9 @@ import Builtin
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
+import qualified Data.Maybe as Maybe
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
@@ -16,7 +19,7 @@ import Control.Monad.Except
 type TypeVariable = String
 
 type TC a =
-  WriterT [Constraint]
+  WriterT [SConstraint]
   (StateT Int
   (Either String))
   a
@@ -33,74 +36,78 @@ freshSVar =
      put $ succ i
      return $ "s" ++ show i
 
-type FreshenTC a =
-  StateT (Map TypeVariable TypeVariable)
-  (WriterT [Constraint]
-  (StateT Int
-  (Either String)))
-  a
+-- Functions to collect sets of variables appearing in types.
 
-freshenVVars :: ValueType -> FreshenTC ValueType
-freshenVVars VIntTy      = return VIntTy
-freshenVVars VBoolTy     = return VBoolTy
-freshenVVars (VListTy t) = VListTy <$> freshenVVars t
-freshenVVars (VFuncTy t) = VFuncTy <$> freshenVVarsFunc t
-freshenVVars (VVarTy a)  =
-  do a' <- lift freshVVar
-     ctxt <- get
-     let newVar = Map.findWithDefault a' a ctxt
-     let ctxt' = Map.insert a newVar ctxt
-     put ctxt'
-     return $ VVarTy newVar
+collectSVars :: Stack -> Set TypeVariable
+collectSVars (S a s) = Set.unions $ Set.singleton a : map collectSVarsValue s
 
-freshenVVarsFunc :: FuncType -> FreshenTC FuncType
-freshenVVarsFunc (F (S a s) (S b t)) =
-  do s' <- mapM freshenVVars s
-     t' <- mapM freshenVVars t
-     return $ F (S a s') (S b t')
+collectSVarsValue :: ValueType -> Set TypeVariable
+collectSVarsValue VIntTy            = Set.empty
+collectSVarsValue VBoolTy           = Set.empty
+collectSVarsValue (VListTy t)       = collectSVarsValue t
+collectSVarsValue (VFuncTy (F l r)) = collectSVars l `Set.union` collectSVars r
+collectSVarsValue (VVarTy _)        = Set.empty
 
-freshenSVars :: ValueType -> FreshenTC ValueType
-freshenSVars VIntTy      = return VIntTy
-freshenSVars VBoolTy     = return VBoolTy
-freshenSVars (VListTy t) = VListTy <$> freshenSVars t
-freshenSVars (VFuncTy t) = VFuncTy <$> freshenSVarsFunc t
-freshenSVars (VVarTy a)  = return $ VVarTy a
+collectVVars :: ValueType -> Set TypeVariable
+collectVVars VIntTy            = Set.empty
+collectVVars VBoolTy           = Set.empty
+collectVVars (VListTy t)       = collectVVars t
+collectVVars (VFuncTy (F l r)) = collectVVarsStack l `Set.union` collectVVarsStack r
+collectVVars (VVarTy v)        = Set.singleton v
 
-freshenSVarsFunc :: FuncType -> FreshenTC FuncType
-freshenSVarsFunc (F (S a s) (S b t)) =
-  do a' <- lift freshSVar
-     b' <- lift freshSVar
-     ctxt <- get
-     let newAVar = Map.findWithDefault a' a ctxt
-     let newBVar = Map.findWithDefault b' b ctxt
-     let ctxt' = Map.insert b newBVar (Map.insert a newAVar ctxt)
-     put ctxt'
-     s' <- mapM freshenSVars s
-     t' <- mapM freshenSVars t
-     return $ F (S newAVar s') (S newBVar t')
+collectVVarsStack :: Stack -> Set TypeVariable
+collectVVarsStack (S _ s) = Set.unions $ map collectVVars s
 
-freshen :: FuncType -> TC FuncType
+-- Functions to walk through a type and perform substitution.
+
+type SSubst = Map TypeVariable Stack
+type VSubst = Map TypeVariable ValueType
+
+substSVars :: SSubst -> Stack -> Stack
+substSVars subst (S a s) = stk
+  where s' = map (substSVarsValue subst) s
+        stk = Maybe.maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s')) (Map.lookup a subst)
+
+substSVarsValue :: SSubst -> ValueType -> ValueType
+substSVarsValue _ VIntTy       = VIntTy
+substSVarsValue _ VBoolTy      = VBoolTy
+substSVarsValue s (VListTy t)  = VListTy $ substSVarsValue s t
+substSVarsValue s (VFuncTy (F l r)) = VFuncTy $ F (substSVars s l) (substSVars s r)
+substSVarsValue _ t@(VVarTy _) = t
+
+substVVars :: VSubst -> ValueType -> ValueType
+substVVars _ VIntTy            = VIntTy
+substVVars _ VBoolTy           = VBoolTy
+substVVars s (VListTy t)       = VListTy $ substVVars s t
+substVVars s (VFuncTy (F l r)) = VFuncTy $ F (substVVarsStack s l) (substVVarsStack s r)
+substVVars s t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v s)
+
+substVVarsStack :: VSubst -> Stack -> Stack
+substVVarsStack subst (S a s) = S a (map (substVVars subst) s)
+
+freshen :: Stack -> TC Stack
 freshen t =
-  do t' <- evalStateT (freshenVVarsFunc t) Map.empty
-     evalStateT (freshenSVarsFunc t') Map.empty
+  do let vVars = Set.toList $ collectVVarsStack t
+         sVars = Set.toList $ collectSVars t
+     newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
+     let t' = substVVarsStack (Map.fromList newVVars) t
+     newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
+     return $ substSVars (Map.fromList newSVars) t'
 
-runTC :: TC a -> Either String (a, [Constraint])
+runTC :: TC a -> Either String (a, [SConstraint])
 runTC m = evalStateT (runWriterT m) 0
 
 --
 
-data Constraint
-  = VEqual ValueType ValueType
-  | SEqual Stack Stack
-    deriving (Eq)
+data VConstraint = VEqual ValueType ValueType
+  deriving (Eq)
+data SConstraint = SEqual Stack Stack
+  deriving (Eq)
 
-instance Show Constraint where
+instance Show VConstraint where
   show (VEqual s t) = show s ++ " :~: " ++ show t
+instance Show SConstraint where
   show (SEqual s t) = show s ++ " :~: " ++ show t
-
-equateVTy :: ValueType -> ValueType -> TC ()
-equateVTy t1 t2 | t1 == t2  = return ()
-                | otherwise = tell [VEqual t1 t2]
 
 equateSTy :: Stack -> Stack -> TC ()
 equateSTy s t | s == t    = return ()
@@ -124,7 +131,9 @@ inferType c (CatTerm t u) =
 
 inferType c (BuiltinTerm s) =
   case Map.lookup s c of
-    Just t  -> freshen t
+    Just (F l r) -> do l' <- freshen l
+                       r' <- freshen r
+                       return $ F l' r'
     Nothing -> throwError $ "Unbound identifier: " ++ s
 
 inferType _ (PushIntTerm _) =
@@ -140,24 +149,30 @@ inferType c (PushFuncTerm term) =
      a <- freshSVar
      return $ F (S a []) (S a [VFuncTy t])
 
-genConstraints :: Term -> Either String (FuncType, [Constraint])
+genConstraints :: Term -> Either String (FuncType, [SConstraint])
 genConstraints = runTC . inferType builtinTypes
 
 ---
 
-type SSubst = Map TypeVariable Stack
-type VSubst = Map TypeVariable ValueType
+afterSSubst :: SSubst -> SSubst -> SSubst
+s1 `afterSSubst` s2 = Map.map (substSVars s1) s2 `Map.union` s1
 
-substSVarsFunc :: SSubst -> FuncType -> FuncType
-substSVarsFunc s (F st1 st2) = undefined
+afterVSubst :: VSubst -> VSubst -> VSubst
+s1 `afterVSubst` s2 = Map.map (substVVars s1) s2 `Map.union` s1
 
-substSVarsValue :: SSubst -> ValueType -> ValueType
-substSVarsValue s t = undefined
+mguStack :: Stack -> Stack -> WriterT [VConstraint] (Either String) SSubst
+mguStack (S a s) (S b t) | length s < length t = mguStack (S b t) (S a s)
+                         | otherwise =
+  do tell $ zipWith VEqual (reverse s) (reverse t)
+     lift $ stackVarAsgn b (S a (take (length s - length t) s))
 
-substVVarsFunc :: VSubst -> FuncType -> FuncType
-substVVarsFunc s t = undefined
+stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
+stackVarAsgn a s | a `Set.member` collectSVars s =
+  throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
+                 | otherwise = return $ Map.singleton a s
 
-substVVarsValue :: VSubst -> ValueType -> ValueType
-substVVarsValue s t = undefined
-
-
+solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
+solveStack =
+  foldM (\(subst1, vcs1) (SEqual s t) -> do
+          (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
+          return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])

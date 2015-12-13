@@ -2,11 +2,6 @@
 
 module Types where
 
-data Kind
-  = StackKind
-  | ValueKind
-    deriving (Eq, Ord, Show)
-
 data Value
   = IntVal Int
   | BoolVal Bool
@@ -41,4 +36,3 @@ instance Show Stack where
 
 instance Show FuncType where
   show (F s t) = show s ++ " -> " ++ show t
-
