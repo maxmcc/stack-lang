@@ -83,14 +83,23 @@ testParseQuotes = "Parsing quotations (first-class functions)" ~: TestList
 
 -- QC against reference interpreter
 
+builtins :: Map.Map String Int
+builtins = Map.fromList [("plus", 0), ("times", 0), ("minus", 0)]
+
 instance Arbitrary Term where
-  --  arbitrary :: Gen Term
   arbitrary = frequency
     [ (2, return IdTerm)
     , (8, CatTerm <$> arbitrary <*> arbitrary)
-    , (2, BuiltinTerm <$> elements $ Map.keys builtins)
-    , (5, PushIntTerm <$> arbitrary)
-    , (3, PushBoolTerm <$> arbitrary)
-    , (2, PushFuncTerm <$> arbitrary)
+    , (2, BuiltinTerm <$> elements (Map.keys builtins))
+    , (3, PushIntTerm <$> arbitrary)
+    , (2, PushBoolTerm <$> arbitrary)
+    , (4, PushFuncTerm <$> arbitrary)
     ]
+
+  shrink (CatTerm x y) = [x, y]
+  shrink t = [t]
+
+
+prop_wellTyped :: Term -> Property
+prop_wellTyped term = undefined
 
