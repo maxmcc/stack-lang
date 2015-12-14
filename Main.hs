@@ -15,7 +15,7 @@ import Control.Monad (when)
 
 slickify :: Term -> [Value] -> [Value]
 slickify IdTerm           = id
-slickify (CatTerm t1 t2)  = slickify t1 . slickify t2
+slickify (CatTerm t1 t2)  = slickify t2 . slickify t1
 slickify (BuiltinTerm s)  = Maybe.fromJust $ Map.lookup s builtinFuncs
 slickify (PushIntTerm i)  = (IntVal i :)
 slickify (PushBoolTerm b) = (BoolVal b :)
@@ -25,12 +25,11 @@ main :: IO ()
 main =
   do hSetBuffering stdin LineBuffering
      putStr "%> " >> hFlush stdout
-     parse <- run <$> getLine
-     case parse of
+     asl <- parse <$> getLine
+     case asl of
        Right term ->
-         case typeInference term of
-           Right t -> print t >> main
-           Left s  -> putStrLn s >> main
+         case typeInference term (S "[]" []) of
+           Right ty -> print (slickify term []) >> putStr " : " >> print ty >> main
+           Left s   -> putStrLn s >> main
        Left s ->
-         print s >>
-         main
+         print s >> main
