@@ -16,7 +16,6 @@ import Text.Printf
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
-import Debug.Trace
 
 type TypeVariable = String
 
@@ -205,22 +204,18 @@ solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
 solveStack =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
           (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
-          traceM $ "new stack substitution: " ++ show subst2
           return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])
 
 solveValue :: SSubst -> [VConstraint] -> Either String VSubst
 solveValue ss =
   foldM (\subst1 (VEqual t1 t2) -> do
           subst2 <- mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
-          traceM $ "new value substitution: " ++ show subst2
           return $ subst2 `afterVSubst` subst1) Map.empty
 
 typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
-     traceM $ "stack constraints: " ++ show scs
      (ss, vcs) <- solveStack scs
-     traceM $ "value constraints: " ++ show vcs
      vs <- solveValue ss vcs
      let l' = substStack ss vs l
      let r' = substStack ss vs r
