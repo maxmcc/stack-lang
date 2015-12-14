@@ -2,47 +2,37 @@
 
 module Types where
 
-import Data.Set (Set)
--- import qualified Data.Set as Set
-
-{-
-
-data Kind
-  = Proper
-  | Stack
-
 data Value
   = IntVal Int
   | BoolVal Bool
+  | ListVal [Value]
+  | QuotVal [Value]
+  | Builtin String
+    deriving (Eq, Ord, Show)
 
-data Type (a :: Kind) where
-  Value :: Value -> Type 'Proper
-  List  :: Type 'Proper -> Type 'Proper
-  Func  :: Type 'Stack -> Type 'Stack -> Type 'Proper
-  Stack :: Type 'Stack -> Type 'Proper -> Type 'Stack
-  Empty :: Type 'Stack
+data ValueType
+  = VIntTy
+  | VBoolTy
+  | VListTy ValueType
+  | VFuncTy FuncType
+  | VVarTy String
+    deriving (Eq)
 
--}
+data Stack = S String [ValueType]
+  deriving (Eq)
 
-data Value =
-    IntVal Int
-  | BoolVal Bool
+data FuncType = F Stack Stack
+  deriving (Eq)
 
-data ProperType =
-    Value Value
-  | List ProperType
-  | Function StackType StackType
+instance Show ValueType where
+  show VIntTy      = "int"
+  show VBoolTy     = "bool"
+  show (VListTy t) = "list " ++ show t
+  show (VFuncTy f) = show f
+  show (VVarTy s)  = s
 
-data StackType =
-    Empty
-  | Push StackType ProperType
+instance Show Stack where
+  show (S a s) = a ++ " ++ " ++ show s
 
-
-data TypeId = String
-
-data Quant = Quant { properVars :: Set TypeId, stackVars :: Set TypeId }
-
-data TypeScheme =
-    Mono ProperType
-  | Forall Quant ProperType
-
+instance Show FuncType where
+  show (F s t) = show s ++ " -> " ++ show t
