@@ -15,6 +15,7 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
+import Debug.Trace
 
 type TypeVariable = String
 
@@ -213,10 +214,17 @@ inferenceRound ss vs scs =
        then return (ss', vs')
        else inferenceRound ss' vs' scs'
 
-typeInference :: Term -> Stack -> Either String FuncType
-typeInference term s =
+typeInference :: Term -> Either String FuncType
+typeInference term =
   do (F l r, scs) <- genConstraints term
-     (ss, vs) <- inferenceRound Map.empty Map.empty (SEqual l s : scs)
+     (ss, vs) <- inferenceRound Map.empty Map.empty scs
      let l' = substVVarsStack vs (substSVars ss l)
      let r' = substVVarsStack vs (substSVars ss r)
      return $ F l' r'
+
+typeInferenceOnEmpty :: Term -> Either String FuncType
+typeInferenceOnEmpty term =
+  do ty@(F (S _ s) _) <- typeInference term
+     if null s
+       then return ty
+       else throwError $ "term expecting a non-empty stack: " ++ show s

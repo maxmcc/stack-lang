@@ -28,7 +28,7 @@ main =
      asl <- parse <$> getLine
      case asl of
        Right term ->
-         case typeInference term (S "[]" []) of
+         case typeInference term of
            Right ty -> print (slickify term []) >> putStr " : " >> print ty >> main
            Left s   -> putStrLn s >> main
        Left s ->
