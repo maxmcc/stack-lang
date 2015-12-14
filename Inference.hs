@@ -172,22 +172,22 @@ mguStack (S a s) (S b t) | length s < length t = mguStack (S b t) (S a s)
   do tell $ zipWith VEqual (reverse s) (reverse t)
      lift $ stackVarAsgn b (S a (take (length s - length t) s))
 
-mguValue :: ValueType -> ValueType -> WriterT [SConstraint] (Either String) VSubst
+mguValue :: ValueType -> ValueType -> Either String VSubst
 mguValue VIntTy VIntTy = return Map.empty
 mguValue VBoolTy VBoolTy = return Map.empty
 mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
-mguValue (VFuncTy (F (S a s) (S b t))) (VFuncTy (F (S a' s') (S b' t'))) =
-  do vs1 <- zipWithM mguValue (reverse s) (reverse s')
-     vs2 <- zipWithM mguValue (reverse t) (reverse t')
-     if length s >= length s'
-       then equateSTy (S a (drop (length s') s)) (S a' [])
-       else equateSTy (S a []) (S a' (drop (length s) s'))
-     if length t >= length t'
-       then equateSTy (S b (drop (length t') t)) (S b' [])
-       else equateSTy (S b []) (S b' (drop (length t) t'))
+mguValue (VFuncTy (F (S _ s) (S _ t))) (VFuncTy (F (S _ s') (S _ t'))) =
+  do vs1 <- if length s == length s'
+              then zipWithM mguValue s s'
+              else throwError $
+                   "VFuncTy argument mismatch: " ++ show s ++ "; " ++ show s'
+     vs2 <- if length t == length t'
+              then zipWithM mguValue t t'
+              else throwError $
+                   "VFuncTy result mismatch: " ++ show t ++ "; " ++ show t'
      return . Map.unions $ vs1 ++ vs2
-mguValue (VVarTy v) t = lift $ valueVarAsgn v t
-mguValue t (VVarTy v) = lift $ valueVarAsgn v t
+mguValue (VVarTy v) t = valueVarAsgn v t
+mguValue t (VVarTy v) = valueVarAsgn v t
 mguValue _ _          = throwError "structural mismatch"
 
 stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
@@ -204,34 +204,25 @@ valueVarAsgn a t
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show t
   | otherwise = return $ Map.singleton a t
 
-solveStack :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, [VConstraint])
-solveStack ss vs =
+solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
+solveStack =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
-          (subst2, vcs2) <- runWriterT $ mguStack (substStack subst1 vs s) (substStack subst1 vs t)
+          (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
           traceM $ "new stack substitution: " ++ show subst2
-          return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (ss, [])
+          return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])
 
-solveValue :: SSubst -> VSubst -> [VConstraint] -> Either String (VSubst, [SConstraint])
-solveValue ss vs =
-  foldM (\(subst1, scs1) (VEqual t1 t2) -> do
-          (subst2, scs2) <- runWriterT $ mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
+solveValue :: SSubst -> [VConstraint] -> Either String VSubst
+solveValue ss =
+  foldM (\subst1 (VEqual t1 t2) -> do
+          subst2 <- mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
           traceM $ "new value substitution: " ++ show subst2
-          return (subst2 `afterVSubst` subst1, scs1 ++ scs2)) (vs, [])
-
-inferenceRound :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, VSubst)
-inferenceRound ss vs scs =
-  do traceM $ "stack constraints: " ++ show scs
-     (ss', vcs) <- solveStack ss vs scs
-     traceM $ "value constraints: " ++ show vcs
-     (vs', scs') <- solveValue ss' vs vcs
-     if null scs'
-       then return (ss', vs')
-       else inferenceRound ss' vs' scs'
+          return $ subst2 `afterVSubst` subst1) Map.empty
 
 typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
-     (ss, vs) <- inferenceRound Map.empty Map.empty scs
+     (ss, vcs) <- solveStack scs
+     vs <- solveValue ss vcs
      let l' = substStack ss vs l
      let r' = substStack ss vs r
      return $ F l' r'
