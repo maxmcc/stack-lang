@@ -3,8 +3,7 @@
 
 module Inference where
 
-import Types
-import Terms
+import Language
 import Builtin
 
 import Data.Map (Map)
@@ -90,6 +89,18 @@ substStack ss vs s = substVVarsStack vs (substSVars ss s)
 substValue :: SSubst -> VSubst -> ValueType -> ValueType
 substValue ss vs t = substVVars vs (substSVarsValue ss t)
 
+substFuncType :: SSubst -> VSubst -> FuncType -> FuncType
+substFuncType ss vs (F l r) = F (substStack ss vs l) (substStack ss vs r)
+
+substTerm :: SSubst -> VSubst -> Term FuncType -> Term FuncType
+substTerm ss vs (IdTerm ty) = IdTerm (substFuncType ss vs ty)
+substTerm ss vs (CatTerm ty t1 t2) = CatTerm (substFuncType ss vs ty) (substTerm ss vs t1) (substTerm ss vs t2)
+substTerm ss vs (BuiltinTerm ty s) = BuiltinTerm (substFuncType ss vs ty) s
+substTerm ss vs (PushIntTerm ty i) = PushIntTerm (substFuncType ss vs ty) i
+substTerm ss vs (PushBoolTerm ty b) = PushBoolTerm (substFuncType ss vs ty) b
+substTerm ss vs (PushNilTerm ty)    = PushNilTerm (substFuncType ss vs ty)
+substTerm ss vs (PushFuncTerm ty t) = PushFuncTerm (substFuncType ss vs ty) (substTerm ss vs t)
+
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
   do let sVars = collectSVars s ++ collectSVars t
@@ -123,37 +134,44 @@ equateSTy s t | s == t    = return ()
 
 type Context = Map String FuncType
 
-inferType :: Context -> Term -> TC FuncType
+inferType :: Context -> Term () -> TC (Term FuncType)
 
-inferType _ IdTerm =
+inferType _ (IdTerm ()) =
   do a <- freshSVar
-     return $ F (S a []) (S a [])
+     return . IdTerm $ F (S a []) (S a [])
 
-inferType c (CatTerm t u) =
-  do F (S a1 t1) (S b1 u1) <- inferType c t
-     F (S a2 t2) (S b2 u2) <- inferType c u
+inferType c (CatTerm () t u) =
+  do t' <- inferType c t
+     u' <- inferType c u
+     let F (S a1 t1) (S b1 u1) = extract t'
+     let F (S a2 t2) (S b2 u2) = extract u'
      equateSTy (S b1 u1) (S a2 t2)
-     return $ F (S a1 t1) (S b2 u2)
+     return $ CatTerm (F (S a1 t1) (S b2 u2)) t' u'
 
-inferType c (BuiltinTerm s) =
+inferType c (BuiltinTerm () s) =
   case Map.lookup s c of
-    Just t  -> freshen t
+    Just t  -> flip BuiltinTerm s <$> freshen t
     Nothing -> throwError $ "Unbound identifier: " ++ s
 
-inferType _ (PushIntTerm _) =
+inferType _ (PushIntTerm () i) =
   do a <- freshSVar
-     return $ F (S a []) (S a [VIntTy])
+     return $ PushIntTerm (F (S a []) (S a [VIntTy])) i
 
-inferType _ (PushBoolTerm _) =
+inferType _ (PushBoolTerm () b) =
   do a <- freshSVar
-     return $ F (S a []) (S a [VBoolTy])
+     return $ PushBoolTerm (F (S a []) (S a [VBoolTy])) b
 
-inferType c (PushFuncTerm term) =
-  do t <- inferType c term
+inferType _ (PushNilTerm ()) =
+  do a <- freshSVar
+     b <- freshVVar
+     return $ PushNilTerm (F (S a []) (S a [VListTy $ VVarTy b]))
+
+inferType c (PushFuncTerm () t) =
+  do t' <- inferType c t
      a <- freshSVar
-     return $ F (S a []) (S a [VFuncTy t])
+     return $ PushFuncTerm (F (S a []) (S a [VFuncTy $ extract t'])) t'
 
-genConstraints :: Term -> Either String (FuncType, [SConstraint])
+genConstraints :: Term () -> Either String (Term FuncType, [SConstraint])
 genConstraints = runTC . inferType builtinTypes
 
 ---
@@ -210,19 +228,18 @@ solveValue ss =
           subst2 <- mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
           return $ subst2 `afterVSubst` subst1) Map.empty
 
-typeInference :: Term -> Either String FuncType
-typeInference term =
-  do (F l r, scs) <- genConstraints term
+typeInference :: Term () -> Either String (Term FuncType)
+typeInference t =
+  do (t', scs) <- genConstraints t
      (ss, vcs) <- solveStack scs
      vs <- solveValue ss vcs
-     let l' = substStack ss vs l
-     let r' = substStack ss vs r
-     return $ F l' r'
+     return $ substTerm ss vs t'
 
-typeInferenceOnEmpty :: Term -> Either String FuncType
-typeInferenceOnEmpty term =
-  do ty@(F (S _ s) _) <- typeInference term
+typeInferenceOnEmpty :: Term () -> Either String (Term FuncType)
+typeInferenceOnEmpty t =
+  do t' <- typeInference t
+     let F (S _ s) _ = extract t'
      if null s
-       then return ty
+       then return t'
        else throwError $ "term expecting a non-empty stack: " ++ show s
 

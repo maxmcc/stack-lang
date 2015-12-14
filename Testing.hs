@@ -6,8 +6,7 @@ import Data.Either (isRight)
 import Test.HUnit
 import Test.QuickCheck
 
-import Types
-import Terms
+import Language
 import Parser
 import Builtin
 import Inference
