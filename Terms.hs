@@ -1,7 +1,8 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
-{-# LANGUAGE GADTs, DataKinds #-}
 
 module Terms where
+
+import Types
 
 type Builtin = String
 
@@ -19,6 +20,13 @@ instance Show Value where
   show (ListVal l)     = show l
   show (FuncVal _)     = "<function>"
   show (Builtin s)     = s
+
+data TypedValue
+  = TIntVal Int
+  | TBoolVal Bool
+  | TListVal ValueType [TypedValue]
+  | TFuncVal FuncType ([TypedValue] -> [TypedValue])
+  | TBuiltin Builtin
 
 data Term
   = IdTerm
