@@ -15,7 +15,6 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
-import Debug.Trace
 
 type TypeVariable = String
 

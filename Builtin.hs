@@ -27,14 +27,16 @@ equalTy :: FuncType
 equalTy = F (S "A" [VIntTy, VIntTy]) (S "A" [VBoolTy])
 
 apply :: [Value] -> [Value]
-apply (FuncVal f : x : s) = f [x] ++ s
+apply (FuncVal f : s) = f s
 applyTy :: FuncType
-applyTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
+applyTy = F (S "A" [VFuncTy (F (S "A" []) (S "B" []))]) (S "B" [])
 
+{-
 apply2 :: [Value] -> [Value]
 apply2 (FuncVal f : x : y : s) = f [x, y] ++ s
 apply2Ty :: FuncType
 apply2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "A" [VVarTy "b", VVarTy "a"]) (S "A" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
+-}
 
 pop :: [Value] -> [Value]
 pop (x : s) = s
@@ -67,9 +69,10 @@ fixImpl :: ((a -> b) -> a -> b) -> a -> b
 fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
 
 fix :: [Value] -> [Value]
-fix (FuncVal f : x : s) = fixImpl (\g a -> g (FuncVal f : a)) [x] ++ s
+fix (FuncVal f : s) = fixImpl (\g a -> g (FuncVal f : a)) s
 fixTy :: FuncType
-fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
+-- fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
+fixTy = F (S "A" [VFuncTy (F (S "A" [VFuncTy (F (S "A" []) (S "B" []))]) (S "B" []))]) (S "B" [])
 
 ifFunc :: [Value] -> [Value]
 ifFunc (BoolVal b : x : y : s) = (if b then x else y) : s
@@ -99,7 +102,7 @@ builtins = Map.fromList
   , ("times", (times, arithTy))
   , ("equal", (equal, equalTy))
   , ("apply", (apply, applyTy))
-  , ("apply2", (apply2, apply2Ty))
+  --, ("apply2", (apply2, apply2Ty))
   , ("pop", (pop, popTy))
   , ("dup", (dup, dupTy))
   , ("swap", (swap, swapTy))
