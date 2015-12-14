@@ -3,8 +3,8 @@ module Testing where
 import qualified Data.Map as Map
 import Data.Either (isRight)
 
-import Test.QuickCheck
 import Test.HUnit
+import Test.QuickCheck
 
 import Types
 import Terms
@@ -13,17 +13,28 @@ import Builtin
 import Inference
 import Main
 
+allTests :: IO ()
+allTests =
+  do _ <- runTestTT $ TestList [testParser, testTypes, testInterpret]
+     quickCheck prop_quote
+     quickCheck prop_quote
+     quickCheck prop_wellTyped
+     quickCheckWith (stdArgs { maxDiscardRatio=100000 }) prop_concat
+
 testParser :: Test
-testParser = TestList [testParseEmpty, testParseBuiltin, testParseQuotes]
+testParser = TestList
+  [testParseEmpty, testParseBuiltin, testParseQuotes]
 
 testTypes :: Test
-testTypes = TestList []
+testTypes = TestList
+  [testTypesBase, testTypesBuiltin,
+   testTypesQuotes, testTypesConcat]
 
 testInterpret :: Test
 testInterpret = TestList []
 
 
--- tests for parser
+-- Tests for parser
 
 parsesTo :: String -> Term -> Test
 parsesTo s t =
@@ -34,8 +45,8 @@ parsesTo s t =
 noParse :: String -> Test
 noParse s =
   case parse s of
-    Right _ -> False ~? "Should not parse"
-    Left _ -> True ~? "Failed as expected"
+    Right _ -> False ~? "Should not parse: " ++ s
+    Left _  -> True  ~? "Failed as expected"
 
 testParseEmpty :: Test
 testParseEmpty = "Parsing whitespace and no tokens" ~: TestList
@@ -79,7 +90,7 @@ testParseQuotes = "Parsing quotations (first-class functions)" ~: TestList
   ]
 
 
--- tests for typechecker
+-- Tests for type inference
 
 -- | Variable-independent comparison of two FuncTypes
 infix 4 ~:~
@@ -91,19 +102,35 @@ f ~:~ g = fty == gty
 hasType :: Term -> FuncType -> Test
 hasType term ty =
   case typeInference term of
-    Right ty' -> ty ~:~ ty' ~?= True
-    Left _ -> False ~? "Should typecheck"
+    Right ty' -> ty ~:~ ty' ~? show ty ++ "\n" ++ show ty'
+    Left err  -> False      ~? show err
 
-int, bool :: ValueType
+hasNoType :: Term -> Test
+hasNoType term =
+  case typeInference term of
+    Right _  -> False ~? "Should not typecheck: " ++ show term
+    Left err -> True  ~? "Failed as expected"
+
+
+int, bool, idType, plusType :: ValueType
 int = VIntTy
 bool = VBoolTy
+idType = VFuncTy $ F (S "A" []) (S "A" [])
+plusType = VFuncTy $ F (S "A" [int, int]) (S "A" [int])
+
+pushes :: [ValueType] -> FuncType
+pushes l = F (S "A" []) (S "A" $ go l)
+  where go []               = []
+        go (VFuncTy f : ts) = VFuncTy ty' : go ts
+          where Right (ty', _) = runTC $ freshen f
+        go (t : ts)         = t : go ts
 
 testTypesBase :: Test
 testTypesBase = "Type inference for base types" ~: TestList
-  [ PushIntTerm 0       `hasType` F (S "A" []) (S "A" [int])
-  , PushIntTerm 100     `hasType` F (S "A" []) (S "A" [int])
-  , PushBoolTerm True   `hasType` F (S "A" []) (S "A" [bool])
-  , PushBoolTerm False  `hasType` F (S "A" []) (S "A" [bool])
+  [ PushIntTerm 0       `hasType` pushes [int]
+  , PushIntTerm 100     `hasType` pushes [int]
+  , PushBoolTerm True   `hasType` pushes [bool]
+  , PushBoolTerm False  `hasType` pushes [bool]
   ]
 
 testTypesBuiltin :: Test
@@ -111,48 +138,93 @@ testTypesBuiltin = "Type inference for builtin functions" ~: TestList
   [ BuiltinTerm "plus"  `hasType` F (S "A" [int, int]) (S "A" [int])
   , BuiltinTerm "minus" `hasType` F (S "A" [int, int]) (S "A" [int])
   , BuiltinTerm "times" `hasType` F (S "A" [int, int]) (S "A" [int])
+  , hasNoType $ BuiltinTerm "not_a_builtin"
   ]
 
-testTypesQuots :: Test
-testTypesQuots = "Type inference for quotations" ~: TestList
-  [
+testTypesQuotes :: Test
+testTypesQuotes = "Type inference for quotations" ~: TestList
+  [ PushFuncTerm IdTerm               `hasType` pushes [idType]
+  , PushFuncTerm (BuiltinTerm "plus") `hasType` pushes [plusType]
+  , PushFuncTerm (PushIntTerm 3)      `hasType` pushes [VFuncTy $ pushes [int]]
+  , PushFuncTerm (PushBoolTerm False) `hasType` pushes [VFuncTy $ pushes [bool]]
+  , PushFuncTerm (PushFuncTerm IdTerm) `hasType`
+        pushes [VFuncTy $ pushes [idType]]
+  , PushFuncTerm (PushFuncTerm (PushIntTerm 3)) `hasType`
+        pushes [VFuncTy $ pushes [VFuncTy $ pushes [int]]]
+  ]
+
+testTypesConcat :: Test
+testTypesConcat = "Type inference for term concatentation" ~: TestList
+  [ CatTerm IdTerm IdTerm `hasType` pushes []
+  , CatTerm IdTerm (PushIntTerm 3) `hasType` pushes [int]
+  , CatTerm (PushIntTerm 3) (PushIntTerm 2) `hasType` pushes [int, int]
+  , CatTerm (PushIntTerm 3) (CatTerm (PushBoolTerm False) (PushBoolTerm True))
+        `hasType` pushes [int, bool, bool]
+  , CatTerm (CatTerm (PushIntTerm 3) (PushBoolTerm False)) (PushBoolTerm True)
+        `hasType` pushes [int, bool, bool]
   ]
 
 
-
--- QC against reference interpreter
+-- QuickCheck properties for type inference
 
 instance Arbitrary Term where
   arbitrary = frequency
-    [ (2, return IdTerm)
+    [ (1, return IdTerm)
     , (8, CatTerm <$> arbitrary <*> arbitrary)
-    , (2, BuiltinTerm <$> elements (Map.keys builtins))
-    , (3, PushIntTerm <$> arbitrary)
+    , (4, BuiltinTerm <$> elements (Map.keys builtins))
+    , (4, PushIntTerm <$> arbitrary)
     , (2, PushBoolTerm <$> arbitrary)
-    , (4, PushFuncTerm <$> arbitrary)
+    , (5, PushFuncTerm <$> arbitrary)
     ]
 
   shrink (CatTerm t1 t2)  = [t1, t2]
   shrink (PushFuncTerm t) = [t]
   shrink _                = []
 
--- Does the term have a type?
-wellTyped :: Term -> Bool
-wellTyped term = isRight $ typeInference term
+
+prop_id :: Term -> Bool
+prop_id term =
+  case typeInference term of
+    Right ty ->
+      case (typeInference cat1, typeInference cat2) of
+        (Right ty', Right ty'') -> ty ~:~ ty' && ty ~:~ ty''
+        _ -> False
+    Left _ -> discard
+  where cat1 = CatTerm IdTerm term
+        cat2 = CatTerm term IdTerm
 
 prop_quote :: Term -> Bool
 prop_quote term =
   case typeInference term of
     Right ty ->
       case typeInference (PushFuncTerm term) of
-        Right ty' ->
-          ty' ~:~ F (S "A" []) (S "A" [VFuncTy ty])
-        Left err -> False
+        Right ty' -> ty' ~:~ pushes [VFuncTy ty]
+        Left _    -> False
     Left _ -> discard
+
+prop_associative :: Term -> Term -> Term -> Bool
+prop_associative term1 term2 term3 =
+  case (typeInference cat1, typeInference cat2) of
+    (Right ty1, Right ty2) -> ty1 ~:~ ty2
+    (Left _, Left _) -> True
+    _ -> False
+  where cat1 = CatTerm (CatTerm term1 term2) term3
+        cat2 = CatTerm term1 (CatTerm term2 term3)
+
+prop_concat :: Term -> Term -> Bool
+prop_concat term1 term2 =
+  case (typeInferenceOnEmpty term1, typeInferenceOnEmpty term2) of
+    (Right (F a b), Right (F c d)) ->
+      if b == c then
+        case typeInferenceOnEmpty (CatTerm term1 term2) of
+          Right ty' -> ty' ~:~ F a d
+          Left _    -> False
+      else discard
+    _ -> discard
 
 prop_wellTyped :: Term -> Bool
 prop_wellTyped term =
   case typeInferenceOnEmpty term of
     Right ty -> slickify term [] `seq` True
-    Left _ -> discard
+    Left _   -> discard
 
