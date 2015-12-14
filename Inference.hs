@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Maybe as Maybe
+import Text.Printf
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
@@ -177,15 +178,11 @@ mguValue VIntTy VIntTy = return Map.empty
 mguValue VBoolTy VBoolTy = return Map.empty
 mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
 mguValue (VFuncTy (F (S _ s) (S _ t))) (VFuncTy (F (S _ s') (S _ t'))) =
-  do vs1 <- if length s == length s'
-              then zipWithM mguValue s s'
-              else throwError $
-                   "VFuncTy argument mismatch: " ++ show s ++ "; " ++ show s'
-     vs2 <- if length t == length t'
-              then zipWithM mguValue t t'
-              else throwError $
-                   "VFuncTy result mismatch: " ++ show t ++ "; " ++ show t'
-     return . Map.unions $ vs1 ++ vs2
+  if (length s, length t) == (length s', length t')
+    then foldM (\vs (vt1, vt2) ->
+                 afterVSubst vs <$> mguValue (substVVars vs vt1) (substVVars vs vt2))
+               Map.empty (zip (s ++ t) (s' ++ t'))
+    else throwError $ printf "VFuncTy stacks mismatched: %s -> %s <> %s -> %s" (show s) (show t) (show s') (show t')
 mguValue (VVarTy v) t = valueVarAsgn v t
 mguValue t (VVarTy v) = valueVarAsgn v t
 mguValue _ _          = throwError "structural mismatch"
@@ -221,7 +218,9 @@ solveValue ss =
 typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
+     traceM $ "stack constraints: " ++ show scs
      (ss, vcs) <- solveStack scs
+     traceM $ "value constraints: " ++ show vcs
      vs <- solveValue ss vcs
      let l' = substStack ss vs l
      let r' = substStack ss vs r

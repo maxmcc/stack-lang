@@ -26,15 +26,17 @@ equal (IntVal y : IntVal x : s) = BoolVal (x == y) : s
 equalTy :: FuncType
 equalTy = F (S "A" [VIntTy, VIntTy]) (S "A" [VBoolTy])
 
-apply :: [Value] -> [Value]
-apply (FuncVal f : s) = f s
-applyTy :: FuncType
-applyTy = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
+apply1 :: [Value] -> [Value]
+apply1 (FuncVal f : s) = f s
+apply1to1Ty :: FuncType
+apply1to1Ty = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
 
 apply2 :: [Value] -> [Value]
 apply2 (FuncVal f : x : y : s) = f [x, y] ++ s
-apply2Ty :: FuncType
-apply2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "B" [VVarTy "b", VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
+apply2to1Ty :: FuncType
+apply2to1Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "B" [VVarTy "b", VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
+apply2to2Ty :: FuncType
+apply2to2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "B" [VVarTy "b", VVarTy "a"]) (S "B" [VVarTy "d", VVarTy "c"]))]) (S "A" [VVarTy "d", VVarTy "c"])
 
 pop :: [Value] -> [Value]
 pop (x : s) = s
@@ -51,15 +53,17 @@ swap (y : x : s) = x : y : s
 swapTy :: FuncType
 swapTy = F (S "A" [VVarTy "a", VVarTy "b"]) (S "A" [VVarTy "b", VVarTy "a"])
 
-dip :: [Value] -> [Value]
-dip (FuncVal f : b : a : s) = b : f [a] ++ s
-dipTy :: FuncType
-dipTy = F (S "A" [VVarTy "a", VVarTy "b", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c", VVarTy "b"])
+dip1 :: [Value] -> [Value]
+dip1 (FuncVal f : b : a : s) = b : f [a] ++ s
+dip1to1Ty :: FuncType
+dip1to1Ty = F (S "A" [VVarTy "a", VVarTy "b", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c", VVarTy "b"])
 
 dip2 :: [Value] -> [Value]
 dip2 (FuncVal f : c : b : a : s) = c : f [b, a] ++ s
-dip2Ty :: FuncType
-dip2Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "B" [VVarTy "a", VVarTy "b"]) (S "B" [VVarTy "d"]))]) (S "A" [VVarTy "d", VVarTy "c"])
+dip2to1Ty :: FuncType
+dip2to1Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "B" [VVarTy "a", VVarTy "b"]) (S "B" [VVarTy "d"]))]) (S "A" [VVarTy "d", VVarTy "c"])
+dip2to2Ty :: FuncType
+dip2to2Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "B" [VVarTy "a", VVarTy "b"]) (S "B" [VVarTy "d", VVarTy "e"]))]) (S "A" [VVarTy "d", VVarTy "e", VVarTy "c"])
 
 -- adapted from https://programmers.stackexchange.com/questions/215712/type-checking-and-recursive-types-writing-the-y-combinator-in-haskell-ocaml
 newtype Mu a = Roll { unroll :: Mu a -> a }
@@ -98,13 +102,15 @@ builtins = Map.fromList
   , ("minus", (minus, arithTy))
   , ("times", (times, arithTy))
   , ("equal", (equal, equalTy))
-  , ("apply", (apply, applyTy))
-  , ("apply2", (apply2, apply2Ty))
+  , ("apply1to1", (apply1, apply1to1Ty))
+  , ("apply2to1", (apply2, apply2to1Ty))
+  , ("apply2to2", (apply2, apply2to2Ty))
   , ("pop", (pop, popTy))
   , ("dup", (dup, dupTy))
   , ("swap", (swap, swapTy))
-  , ("dip", (dip, dipTy))
-  , ("dip2", (dip2, dip2Ty))
+  , ("dip1to1", (dip1, dip1to1Ty))
+  , ("dip2to1", (dip2, dip2to1Ty))
+  , ("dip2to2", (dip2, dip2to2Ty))
   , ("fix", (fix, fixTy))
   , ("if", (ifFunc, ifTy))
   , ("nil", (nil, nilTy))
