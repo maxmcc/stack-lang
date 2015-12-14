@@ -1,13 +1,19 @@
 module Testing where
 
 import qualified Data.Map as Map
+import Data.Either (isRight)
+
+import Debug.Trace
 
 import Test.QuickCheck
 import Test.HUnit
 
+import Types
 import Terms
 import Parser
 import Builtin
+import Inference
+import Main
 
 testParser :: Test
 testParser = TestList [testParseEmpty, testParseBuiltin, testParseQuotes]
@@ -77,20 +83,72 @@ testParseQuotes = "Parsing quotations (first-class functions)" ~: TestList
 
 -- tests for typechecker
 
+(~:~) :: FuncType -> FuncType -> Bool
+f ~:~ g = fty == gty
+  where Right (fty, _) = runTC $ freshen f
+        Right (gty, _) = runTC $ freshen g
 
--- tests for interpreter
+hasType :: Term -> FuncType -> Test
+hasType term ty =
+  case typeInference term of
+    Right ty' -> ty ~:~ ty' ~?= True
+    Left _ -> False ~? "Should typecheck"
+
+int, bool :: ValueType
+int = VIntTy
+bool = VBoolTy
+
+testTypesBase :: Test
+testTypesBase = "Type inference for base types" ~: TestList
+  [ PushIntTerm 0 `hasType` F (S "A" []) (S "A" [int])
+  , PushIntTerm 100 `hasType` F (S "A" []) (S "A" [int])
+  , PushBoolTerm True `hasType` F (S "A" []) (S "A" [bool])
+  , PushBoolTerm False `hasType` F (S "A" []) (S "A" [bool])
+  ]
+
+testTypesBuiltin :: Test
+testTypesBuiltin = "Type inference for builtin functions" ~: TestList
+  [ BuiltinTerm "plus" `hasType` F (S "A" [int, int]) (S "A" [int])
+  , BuiltinTerm "minus" `hasType` F (S "A" [int, int]) (S "A" [int])
+  , BuiltinTerm "times" `hasType` F (S "A" [int, int]) (S "A" [int])
+  ]
+
+testTypesQuots :: Test
+testTypesQuots = "Type inference for quotations" ~: TestList
+  [
+  ]
+
 
 
 -- QC against reference interpreter
 
 instance Arbitrary Term where
-  --  arbitrary :: Gen Term
   arbitrary = frequency
     [ (2, return IdTerm)
     , (8, CatTerm <$> arbitrary <*> arbitrary)
-    , (2, BuiltinTerm <$> elements $ Map.keys builtins)
-    , (5, PushIntTerm <$> arbitrary)
-    , (3, PushBoolTerm <$> arbitrary)
-    , (2, PushFuncTerm <$> arbitrary)
+    , (2, BuiltinTerm <$> elements (Map.keys builtins))
+    , (3, PushIntTerm <$> arbitrary)
+    , (2, PushBoolTerm <$> arbitrary)
+    , (4, PushFuncTerm <$> arbitrary)
     ]
+
+-- Does the term have a type?
+wellTyped :: Term -> Bool
+wellTyped term = isRight $ typeInference term
+
+prop_quote :: Term -> Bool
+prop_quote term =
+  case typeInferenceOnEmpty term of
+    Right ty ->
+      case typeInferenceOnEmpty (PushFuncTerm term) of
+        Right ty' ->
+          ty' ~:~ F (S "A" []) (S "A" [VFuncTy ty])
+        Left err -> traceShow err False
+    Left _ -> discard
+
+prop_wellTyped :: Term -> Property
+prop_wellTyped term =
+  case typeInferenceOnEmpty term of
+    Right ty -> slickify term [] == slickify term []
+    Left _ -> discard
 
