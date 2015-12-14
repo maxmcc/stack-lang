@@ -2,14 +2,6 @@
 
 module Types where
 
-data Value
-  = IntVal Int
-  | BoolVal Bool
-  | ListVal [Value]
-  | QuotVal [Value]
-  | Builtin String
-    deriving (Eq, Ord, Show)
-
 data ValueType
   = VIntTy
   | VBoolTy
