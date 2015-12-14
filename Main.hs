@@ -6,6 +6,7 @@ import Builtin
 import Parser
 
 import System.IO
+import Data.Map (empty)
 import Control.Monad (when)
 
 main :: IO ()
