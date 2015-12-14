@@ -9,7 +9,6 @@ data Value
   | BoolVal Bool
   | ListVal [Value]
   | FuncVal ([Value] -> [Value])
-  | Builtin Builtin
 
 instance Show Value where
   show (IntVal i)      = show i
@@ -17,23 +16,29 @@ instance Show Value where
   show (BoolVal False) = "false"
   show (ListVal l)     = show l
   show (FuncVal _)     = "<function>"
-  show (Builtin s)     = s
 
 data TypedValue
   = TIntVal Int
   | TBoolVal Bool
   | TListVal ValueType [TypedValue]
   | TFuncVal FuncType ([TypedValue] -> [TypedValue])
-  | TBuiltin Builtin
 
-data Term
-  = IdTerm
-  | CatTerm Term Term
-  | BuiltinTerm Builtin
-  | PushIntTerm Int
-  | PushBoolTerm Bool
-  | PushFuncTerm Term
+data Term a
+  = IdTerm a
+  | CatTerm a (Term a) (Term a)
+  | BuiltinTerm a Builtin
+  | PushIntTerm a Int
+  | PushBoolTerm a Bool
+  | PushFuncTerm a (Term a)
     deriving (Eq, Ord, Show)
+
+extract :: Term a -> a
+extract (IdTerm a)         = a
+extract (CatTerm a _ _)    = a
+extract (BuiltinTerm a _)  = a
+extract (PushIntTerm a _)  = a
+extract (PushBoolTerm a _) = a
+extract (PushFuncTerm a _) = a
 
 data ValueType
   = VIntTy
