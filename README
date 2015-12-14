@@ -1,0 +1,27 @@
+CIS 552 Project
+Meyer Kizner (mkizner), Max McCarthy (maxmcc)
+=============================================
+
+We implemented an interpreter and type inferencer for a stack-based programming
+language of our own design. Terms in this language manipulate an implicit stack;
+writing a simple value such as "2" pushes it to the stack, and builtins are
+provided for basic manipulation of the stack, including popping values, swapping
+the top two values, and applying functions on the stack.
+
+One of the simplest possible programs is
+
+  2 3 plus
+
+It could also be written by pushing the "plus" function to the stack in a
+quotation, like so:
+
+  2 3 {plus} apply
+
+The files Terms.hs and Types.hs describe our language and the abstract syntax
+we eventually adopted. The type inference logic is in Inference.hs; it borrows
+heavily from the type inference lectures, but it is also heavily adapted to suit
+the needs of our language. The parser is in Parser.hs, and the main interpreter
+is a REPL in Main.hs. Our unit tests and QuickCheck properties can be found in
+Testing.hs. Finally, Builtin.hs defines built-in values and their types. This is
+roughly the order in which one might read through this project.
+
