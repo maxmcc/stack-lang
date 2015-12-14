@@ -18,7 +18,6 @@ langDef :: LanguageDef ()
 langDef = emptyDef
   { commentStart = "(*"
   , commentEnd = "*)"
-  , commentLine = "//"
   , nestedComments = True
   , identStart = letter
   , identLetter = alphaNum <|> char '_'
@@ -30,16 +29,18 @@ langDef = emptyDef
 
 tokenParser :: Parser Term
 tokenParser = (PushIntTerm . fromIntegral) <$> integer lexer
-          <|> (reserved lexer "true" *> pure (PushBoolTerm True))
-          <|> (reserved lexer "false" *> pure (PushBoolTerm False))
+          <|> reserved lexer "true" *> pure (PushBoolTerm True)
+          <|> reserved lexer "false" *> pure (PushBoolTerm False)
           <|> BuiltinTerm <$> identifier lexer
           <|> PushFuncTerm <$> braces lexer parser
 
 parser :: Parser Term
 parser = do whiteSpace lexer
-            fs <- many (lexeme lexer tokenParser)
-            return $ Prelude.foldl CatTerm IdTerm fs
+            fs <- many $ lexeme lexer tokenParser
+            if null fs
+               then return IdTerm
+               else return $ foldl1 CatTerm fs
 
-run :: String -> Either ParseError Term
-run = runParser parser () ""
+parse :: String -> Either ParseError Term
+parse = runParser parser () ""
 
