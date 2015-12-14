@@ -71,7 +71,7 @@ fixImpl :: ((a -> b) -> a -> b) -> a -> b
 fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
 
 fix :: [Value] -> [Value]
-fix (FuncVal f : s) = fixImpl (\g a -> g (FuncVal f : a)) s
+fix (FuncVal f : s) = fixImpl (\g a -> f (FuncVal g : a)) s
 fixTy :: FuncType
 fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a", VFuncTy (F (S "C" [VVarTy "a"]) (S "C" [VVarTy "b"]))]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
 
