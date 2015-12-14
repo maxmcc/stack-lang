@@ -15,6 +15,7 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
+import Debug.Trace
 
 type TypeVariable = String
 
@@ -211,7 +212,9 @@ solveValue ss vs =
 
 inferenceRound :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, VSubst)
 inferenceRound ss vs scs =
-  do (ss', vcs) <- solveStack ss vs scs
+  do traceM $ "stack constraints: " ++ show scs
+     (ss', vcs) <- solveStack ss vs scs
+     traceM $ "value constraints: " ++ show vcs
      (vs', scs') <- solveValue ss' vs vcs
      if null scs'
        then return (ss', vs')

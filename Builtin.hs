@@ -29,14 +29,12 @@ equalTy = F (S "A" [VIntTy, VIntTy]) (S "A" [VBoolTy])
 apply :: [Value] -> [Value]
 apply (FuncVal f : s) = f s
 applyTy :: FuncType
-applyTy = F (S "A" [VFuncTy (F (S "A" []) (S "B" []))]) (S "B" [])
+applyTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
 
-{-
 apply2 :: [Value] -> [Value]
 apply2 (FuncVal f : x : y : s) = f [x, y] ++ s
 apply2Ty :: FuncType
 apply2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "A" [VVarTy "b", VVarTy "a"]) (S "A" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
--}
 
 pop :: [Value] -> [Value]
 pop (x : s) = s
@@ -64,7 +62,6 @@ dip2Ty :: FuncType
 dip2Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "A" [VVarTy "a", VVarTy "b"]) (S "A" [VVarTy "d"]))]) (S "A" [VVarTy "d", VVarTy "c"])
 
 -- adapted from https://programmers.stackexchange.com/questions/215712/type-checking-and-recursive-types-writing-the-y-combinator-in-haskell-ocaml
-{-
 newtype Mu a = Roll { unroll :: Mu a -> a }
 fixImpl :: ((a -> b) -> a -> b) -> a -> b
 fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
@@ -72,9 +69,7 @@ fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
 fix :: [Value] -> [Value]
 fix (FuncVal f : s) = fixImpl (\g a -> g (FuncVal f : a)) s
 fixTy :: FuncType
--- fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
-fixTy = F (S "A" [VFuncTy (F (S "A" [VFuncTy (F (S "A" []) (S "B" []))]) (S "B" []))]) (S "B" [])
--}
+fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
 
 ifFunc :: [Value] -> [Value]
 ifFunc (BoolVal b : x : y : s) = (if b then x else y) : s
@@ -104,13 +99,13 @@ builtins = Map.fromList
   , ("times", (times, arithTy))
   , ("equal", (equal, equalTy))
   , ("apply", (apply, applyTy))
-  --, ("apply2", (apply2, apply2Ty))
+  , ("apply2", (apply2, apply2Ty))
   , ("pop", (pop, popTy))
   , ("dup", (dup, dupTy))
   , ("swap", (swap, swapTy))
   , ("dip", (dip, dipTy))
   , ("dip2", (dip2, dip2Ty))
-  --, ("fix", (fix, fixTy))
+  , ("fix", (fix, fixTy))
   , ("if", (ifFunc, ifTy))
   , ("nil", (nil, nilTy))
   , ("cons", (cons, consTy))
