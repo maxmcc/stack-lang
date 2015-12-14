@@ -3,8 +3,7 @@
 
 module Inference where
 
-import Types
-import Terms
+import Language
 import Builtin
 
 import Data.Map (Map)

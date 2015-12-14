@@ -2,7 +2,7 @@
 
 module Parser where
 
-import Terms
+import Language
 
 import Text.Parsec.String (Parser)
 import Text.Parsec.Error (ParseError)

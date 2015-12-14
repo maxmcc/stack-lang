@@ -3,7 +3,7 @@
 
 module Main where
 
-import Terms
+import Language
 import Inference
 import Builtin
 import Parser

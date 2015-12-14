@@ -1,8 +1,6 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
 
-module Terms where
-
-import Types
+module Language where
 
 type Builtin = String
 
@@ -37,3 +35,29 @@ data Term
   | PushFuncTerm Term
     deriving (Eq, Ord, Show)
 
+data ValueType
+  = VIntTy
+  | VBoolTy
+  | VListTy ValueType
+  | VFuncTy FuncType
+  | VVarTy String
+    deriving (Eq)
+
+instance Show ValueType where
+  show VIntTy      = "int"
+  show VBoolTy     = "bool"
+  show (VListTy t) = "list " ++ show t
+  show (VFuncTy f) = show f
+  show (VVarTy s)  = s
+
+data Stack = S String [ValueType]
+  deriving (Eq)
+
+instance Show Stack where
+  show (S a s) = a ++ " ++ " ++ show s
+
+data FuncType = F Stack Stack
+  deriving (Eq)
+
+instance Show FuncType where
+  show (F s t) = show s ++ " -> " ++ show t
