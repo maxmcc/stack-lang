@@ -176,10 +176,16 @@ mguValue :: ValueType -> ValueType -> WriterT [SConstraint] (Either String) VSub
 mguValue VIntTy VIntTy = return Map.empty
 mguValue VBoolTy VBoolTy = return Map.empty
 mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
-mguValue (VFuncTy (F l1 r1)) (VFuncTy (F l2 r2)) =
-  do equateSTy l1 l2
-     equateSTy r1 r2
-     return Map.empty
+mguValue (VFuncTy (F (S a s) (S b t))) (VFuncTy (F (S a' s') (S b' t'))) =
+  do vs1 <- zipWithM mguValue (reverse s) (reverse s')
+     vs2 <- zipWithM mguValue (reverse t) (reverse t')
+     if length s >= length s'
+       then equateSTy (S a (drop (length s') s)) (S a' [])
+       else equateSTy (S a []) (S a' (drop (length s) s'))
+     if length t >= length t'
+       then equateSTy (S b (drop (length t') t)) (S b' [])
+       else equateSTy (S b []) (S b' (drop (length t) t'))
+     return . Map.unions $ vs1 ++ vs2
 mguValue (VVarTy v) t = lift $ valueVarAsgn v t
 mguValue t (VVarTy v) = lift $ valueVarAsgn v t
 mguValue _ _          = throwError "structural mismatch"
@@ -202,12 +208,14 @@ solveStack :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, [VCons
 solveStack ss vs =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
           (subst2, vcs2) <- runWriterT $ mguStack (substStack subst1 vs s) (substStack subst1 vs t)
+          traceM $ "new stack substitution: " ++ show subst2
           return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (ss, [])
 
 solveValue :: SSubst -> VSubst -> [VConstraint] -> Either String (VSubst, [SConstraint])
 solveValue ss vs =
   foldM (\(subst1, scs1) (VEqual t1 t2) -> do
           (subst2, scs2) <- runWriterT $ mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
+          traceM $ "new value substitution: " ++ show subst2
           return (subst2 `afterVSubst` subst1, scs1 ++ scs2)) (vs, [])
 
 inferenceRound :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, VSubst)

@@ -29,12 +29,12 @@ equalTy = F (S "A" [VIntTy, VIntTy]) (S "A" [VBoolTy])
 apply :: [Value] -> [Value]
 apply (FuncVal f : s) = f s
 applyTy :: FuncType
-applyTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
+applyTy = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
 
 apply2 :: [Value] -> [Value]
 apply2 (FuncVal f : x : y : s) = f [x, y] ++ s
 apply2Ty :: FuncType
-apply2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "A" [VVarTy "b", VVarTy "a"]) (S "A" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
+apply2Ty = F (S "A" [VVarTy "b", VVarTy "a", VFuncTy (F (S "B" [VVarTy "b", VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c"])
 
 pop :: [Value] -> [Value]
 pop (x : s) = s
@@ -54,12 +54,12 @@ swapTy = F (S "A" [VVarTy "a", VVarTy "b"]) (S "A" [VVarTy "b", VVarTy "a"])
 dip :: [Value] -> [Value]
 dip (FuncVal f : b : a : s) = b : f [a] ++ s
 dipTy :: FuncType
-dipTy = F (S "A" [VVarTy "a", VVarTy "b", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "c"]))]) (S "A" [VVarTy "c", VVarTy "b"])
+dipTy = F (S "A" [VVarTy "a", VVarTy "b", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c", VVarTy "b"])
 
 dip2 :: [Value] -> [Value]
 dip2 (FuncVal f : c : b : a : s) = c : f [b, a] ++ s
 dip2Ty :: FuncType
-dip2Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "A" [VVarTy "a", VVarTy "b"]) (S "A" [VVarTy "d"]))]) (S "A" [VVarTy "d", VVarTy "c"])
+dip2Ty = F (S "A" [VVarTy "a", VVarTy "b", VVarTy "c", VFuncTy (F (S "B" [VVarTy "a", VVarTy "b"]) (S "B" [VVarTy "d"]))]) (S "A" [VVarTy "d", VVarTy "c"])
 
 -- adapted from https://programmers.stackexchange.com/questions/215712/type-checking-and-recursive-types-writing-the-y-combinator-in-haskell-ocaml
 newtype Mu a = Roll { unroll :: Mu a -> a }
@@ -69,7 +69,7 @@ fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
 fix :: [Value] -> [Value]
 fix (FuncVal f : s) = fixImpl (\g a -> g (FuncVal f : a)) s
 fixTy :: FuncType
-fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a", VFuncTy (F (S "A" [VVarTy "a"]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
+fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a", VFuncTy (F (S "C" [VVarTy "a"]) (S "C" [VVarTy "b"]))]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
 
 ifFunc :: [Value] -> [Value]
 ifFunc (BoolVal b : x : y : s) = (if b then x else y) : s
@@ -90,7 +90,7 @@ listMatch :: [Value] -> [Value]
 listMatch (ListVal [] : FuncVal nilCase : _ : s)        = nilCase [] ++ s
 listMatch (ListVal (x : xs) : _ : FuncVal consCase : s) = consCase [x, ListVal xs] ++ s
 listMatchTy :: FuncType
-listMatchTy = F (S "A" [VFuncTy (F (S "A" [VListTy $ VVarTy "a", VVarTy "a"]) (S "A" [VVarTy "b"])), VFuncTy (F (S "A" []) (S "A" [VVarTy "b"])), VListTy $ VVarTy "a"]) (S "A" [VVarTy "b"])
+listMatchTy = F (S "A" [VFuncTy (F (S "B" [VListTy $ VVarTy "a", VVarTy "a"]) (S "B" [VVarTy "b"])), VFuncTy (F (S "C" []) (S "C" [VVarTy "b"])), VListTy $ VVarTy "a"]) (S "A" [VVarTy "b"])
 
 builtins :: Map Builtin ([Value] -> [Value], FuncType)
 builtins = Map.fromList
