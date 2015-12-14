@@ -112,7 +112,7 @@ instance Show VConstraint where
 instance Show SConstraint where
   show (SEqual s t) = show s ++ " :~: " ++ show t
 
-equateSTy :: Stack -> Stack -> TC ()
+equateSTy :: Monad m => Stack -> Stack -> WriterT [SConstraint] m ()
 equateSTy s t | s == t    = return ()
               | otherwise = tell [SEqual s t]
 
@@ -173,7 +173,8 @@ mguValue VBoolTy VBoolTy = return Map.empty
 mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
 mguValue (VFuncTy (F l1 r1)) (VFuncTy (F l2 r2)) =
   -- TODO: unclear
-  do tell [SEqual l1 l2, SEqual r1 r2]
+  do equateSTy l1 l2
+     equateSTy r1 r2
      return Map.empty
 mguValue (VVarTy v) t = lift $ valueVarAsgn v t
 mguValue t (VVarTy v) = lift $ valueVarAsgn v t
@@ -181,6 +182,7 @@ mguValue _ _          = throwError "structural mismatch"
 
 stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
 stackVarAsgn a s
+  | s == S a [] = return Map.empty
   | a `Set.member` collectSVars s =
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
   | otherwise = return $ Map.singleton a s
@@ -216,4 +218,6 @@ typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
      (ss, vs) <- inferenceRound Map.empty Map.empty scs
-     return $ F (substSVars ss (substVVarsStack vs l)) (substSVars ss (substVVarsStack vs r))
+     let l' = substSVars ss (substVVarsStack vs l)
+     let r' = substSVars ss (substVVarsStack vs r)
+     return $ F l' r'

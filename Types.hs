@@ -29,7 +29,7 @@ instance Show ValueType where
   show VBoolTy     = "bool"
   show (VListTy t) = "list " ++ show t
   show (VFuncTy f) = show f
-  show (VVarTy s)  = "'" ++ s
+  show (VVarTy s)  = s
 
 instance Show Stack where
   show (S a s) = a ++ " ++ " ++ show s

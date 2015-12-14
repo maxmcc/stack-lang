@@ -25,5 +25,8 @@ builtinTypes = Map.fromList
   , ("dip", F (S "A" [VVarTy "a", VFuncTy (F (S "A" []) (S "B" []))]) (S "B" [VVarTy "a"]))
   , ("fix", F (S "A" [VFuncTy (F (S "A" [VFuncTy (F (S "A" []) (S "B" []))]) (S "B" []))]) (S "B" []))
   , ("if", F (S "A" [VVarTy "a", VVarTy "a", VBoolTy]) (S "A" [VVarTy "a"]))
+  , ("nil", F (S "A" []) (S "A" [VListTy $ VVarTy "a"]))
+  , ("cons", F (S "A" [VListTy $ VVarTy "a", VVarTy "a"]) (S "A" [VListTy $ VVarTy "a"]))
+  , ("listMatch", F (S "A" [VFuncTy (F (S "A" [VListTy $ VVarTy "a", VVarTy "a"]) (S "A" [VVarTy "b"])), VFuncTy (F (S "A" []) (S "A" [VVarTy "b"])), VListTy $ VVarTy "a"]) (S "A" [VVarTy "b"]))
   ]
 
