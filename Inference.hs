@@ -15,6 +15,7 @@ import qualified Data.Maybe as Maybe
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
+import Debug.Trace
 
 type TypeVariable = String
 
@@ -87,14 +88,14 @@ substVVarsStack subst (S a s) = S a (map (substVVars subst) s)
 
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
-  do let vVars = Set.toList $ collectVVarsStack s `Set.union` collectVVarsStack t
-         sVars = Set.toList $ collectSVars s `Set.union` collectSVars t
-     newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
-     let s' = substVVarsStack (Map.fromList newVVars) s
-     let t' = substVVarsStack (Map.fromList newVVars) t
+  do let sVars = Set.toList $ collectSVars s `Set.union` collectSVars t
+         vVars = Set.toList $ collectVVarsStack s `Set.union` collectVVarsStack t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
-     let s'' = substSVars (Map.fromList newSVars) s'
-     let t'' = substSVars (Map.fromList newSVars) t'
+     let s' = substSVars (Map.fromList newSVars) s
+     let t' = substSVars (Map.fromList newSVars) t
+     newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
+     let s'' = substVVarsStack (Map.fromList newVVars) s'
+     let t'' = substVVarsStack (Map.fromList newVVars) t'
      return $ F s'' t''
 
 runTC :: TC a -> Either String (a, [SConstraint])
@@ -172,7 +173,6 @@ mguValue VIntTy VIntTy = return Map.empty
 mguValue VBoolTy VBoolTy = return Map.empty
 mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
 mguValue (VFuncTy (F l1 r1)) (VFuncTy (F l2 r2)) =
-  -- TODO: unclear
   do equateSTy l1 l2
      equateSTy r1 r2
      return Map.empty
@@ -218,6 +218,6 @@ typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
      (ss, vs) <- inferenceRound Map.empty Map.empty scs
-     let l' = substSVars ss (substVVarsStack vs l)
-     let r' = substSVars ss (substVVarsStack vs r)
+     let l' = substVVarsStack vs (substSVars ss l)
+     let r' = substVVarsStack vs (substSVars ss r)
      return $ F l' r'
