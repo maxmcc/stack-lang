@@ -7,21 +7,15 @@ type Builtin = String
 data Value
   = IntVal Int
   | BoolVal Bool
-  | ListVal [Value]
-  | FuncVal ([Value] -> [Value])
+  | ListVal ValueType [Value]
+  | FuncVal FuncType ([Value] -> [Value])
 
 instance Show Value where
   show (IntVal i)      = show i
   show (BoolVal True)  = "true"
   show (BoolVal False) = "false"
-  show (ListVal l)     = show l
-  show (FuncVal _)     = "<function>"
-
-data TypedValue
-  = TIntVal Int
-  | TBoolVal Bool
-  | TListVal ValueType [TypedValue]
-  | TFuncVal FuncType ([TypedValue] -> [TypedValue])
+  show (ListVal _ l)   = show l
+  show (FuncVal _ _)   = "<function>"
 
 data Term a
   = IdTerm a
@@ -29,6 +23,7 @@ data Term a
   | BuiltinTerm a Builtin
   | PushIntTerm a Int
   | PushBoolTerm a Bool
+  | PushNilTerm a
   | PushFuncTerm a (Term a)
     deriving (Eq, Ord, Show)
 
@@ -38,6 +33,7 @@ extract (CatTerm a _ _)    = a
 extract (BuiltinTerm a _)  = a
 extract (PushIntTerm a _)  = a
 extract (PushBoolTerm a _) = a
+extract (PushNilTerm a)    = a
 extract (PushFuncTerm a _) = a
 
 data ValueType

@@ -26,7 +26,7 @@ equalTy :: FuncType
 equalTy = F (S "A" [VIntTy, VIntTy]) (S "A" [VBoolTy])
 
 apply :: [Value] -> [Value]
-apply (FuncVal f : s) = f s
+apply (FuncVal _ f : s) = f s
 apply1to1Ty :: FuncType
 apply1to1Ty = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"])
 apply2to1Ty :: FuncType
@@ -50,7 +50,7 @@ swapTy :: FuncType
 swapTy = F (S "A" [VVarTy "a", VVarTy "b"]) (S "A" [VVarTy "b", VVarTy "a"])
 
 dip :: [Value] -> [Value]
-dip (FuncVal f : b : s) = b : f s
+dip (FuncVal _ f : b : s) = b : f s
 dip1to1Ty :: FuncType
 dip1to1Ty = F (S "A" [VVarTy "a", VVarTy "b", VFuncTy (F (S "B" [VVarTy "a"]) (S "B" [VVarTy "c"]))]) (S "A" [VVarTy "c", VVarTy "b"])
 dip2to1Ty :: FuncType
@@ -64,7 +64,7 @@ fixImpl :: ((a -> b) -> a -> b) -> a -> b
 fixImpl f = (\x a -> f (unroll x x) a) $ Roll (\x a -> f (unroll x x) a)
 
 fix :: [Value] -> [Value]
-fix (FuncVal f : s) = fixImpl (\g a -> f (FuncVal g : a)) s
+fix (FuncVal ty f : s) = fixImpl (\g a -> f (FuncVal ty g : a)) s
 fixTy :: FuncType
 fixTy = F (S "A" [VVarTy "a", VFuncTy (F (S "B" [VVarTy "a", VFuncTy (F (S "C" [VVarTy "a"]) (S "C" [VVarTy "b"]))]) (S "B" [VVarTy "b"]))]) (S "A" [VVarTy "b"]) 
 
@@ -73,19 +73,14 @@ ifFunc (BoolVal b : x : y : s) = (if b then x else y) : s
 ifTy :: FuncType
 ifTy = F (S "A" [VVarTy "a", VVarTy "a", VBoolTy]) (S "A" [VVarTy "a"])
 
-nil :: [Value] -> [Value]
-nil s = ListVal [] : s
-nilTy :: FuncType
-nilTy = F (S "A" []) (S "A" [VListTy $ VVarTy "a"])
-
 cons :: [Value] -> [Value]
-cons (x : ListVal l : s) = ListVal (x : l) : s
+cons (x : ListVal ty l : s) = ListVal ty (x : l) : s
 consTy :: FuncType
 consTy = F (S "A" [VListTy $ VVarTy "a", VVarTy "a"]) (S "A" [VListTy $ VVarTy "a"])
 
 listMatch :: [Value] -> [Value]
-listMatch (ListVal [] : FuncVal nilCase : _ : s)        = nilCase [] ++ s
-listMatch (ListVal (x : xs) : _ : FuncVal consCase : s) = consCase [x, ListVal xs] ++ s
+listMatch (ListVal _ [] : FuncVal _ nilCase : _ : s)         = nilCase [] ++ s
+listMatch (ListVal ty (x : xs) : _ : FuncVal _ consCase : s) = consCase [x, ListVal ty xs] ++ s
 listMatchTy :: FuncType
 listMatchTy = F (S "A" [VFuncTy (F (S "B" [VListTy $ VVarTy "a", VVarTy "a"]) (S "B" [VVarTy "b"])), VFuncTy (F (S "C" []) (S "C" [VVarTy "b"])), VListTy $ VVarTy "a"]) (S "A" [VVarTy "b"])
 
@@ -106,7 +101,6 @@ builtins = Map.fromList
   , ("dip2to2", (dip, dip2to2Ty))
   , ("fix", (fix, fixTy))
   , ("if", (ifFunc, ifTy))
-  , ("nil", (nil, nilTy))
   , ("cons", (cons, consTy))
   , ("listMatch", (listMatch, listMatchTy))
   ]

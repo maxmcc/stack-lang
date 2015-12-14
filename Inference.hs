@@ -98,6 +98,7 @@ substTerm ss vs (CatTerm ty t1 t2) = CatTerm (substFuncType ss vs ty) (substTerm
 substTerm ss vs (BuiltinTerm ty s) = BuiltinTerm (substFuncType ss vs ty) s
 substTerm ss vs (PushIntTerm ty i) = PushIntTerm (substFuncType ss vs ty) i
 substTerm ss vs (PushBoolTerm ty b) = PushBoolTerm (substFuncType ss vs ty) b
+substTerm ss vs (PushNilTerm ty)    = PushNilTerm (substFuncType ss vs ty)
 substTerm ss vs (PushFuncTerm ty t) = PushFuncTerm (substFuncType ss vs ty) (substTerm ss vs t)
 
 freshen :: FuncType -> TC FuncType
@@ -159,6 +160,11 @@ inferType _ (PushIntTerm () i) =
 inferType _ (PushBoolTerm () b) =
   do a <- freshSVar
      return $ PushBoolTerm (F (S a []) (S a [VBoolTy])) b
+
+inferType _ (PushNilTerm ()) =
+  do a <- freshSVar
+     b <- freshVVar
+     return $ PushNilTerm (F (S a []) (S a [VListTy $ VVarTy b]))
 
 inferType c (PushFuncTerm () t) =
   do t' <- inferType c t

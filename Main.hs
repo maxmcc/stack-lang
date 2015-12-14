@@ -8,17 +8,19 @@ import Inference
 import Builtin
 import Parser
 
-import System.IO
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
+import System.IO
 
-slickify :: Term () -> [Value] -> [Value]
-slickify (IdTerm ())         = id
-slickify (CatTerm () t1 t2)  = slickify t2 . slickify t1
-slickify (BuiltinTerm () s)  = Maybe.fromJust $ Map.lookup s builtinFuncs
-slickify (PushIntTerm () i)  = (IntVal i :)
-slickify (PushBoolTerm () b) = (BoolVal b :)
-slickify (PushFuncTerm () f) = (FuncVal (slickify f) :)
+interpret :: Term FuncType -> [Value] -> [Value]
+interpret (IdTerm _)                     = id
+interpret (CatTerm _ t1 t2)              = interpret t2 . interpret t1
+interpret (BuiltinTerm _ s)              = Maybe.fromJust $ Map.lookup s builtinFuncs
+interpret (PushIntTerm _ i)              = (IntVal i :)
+interpret (PushBoolTerm _ b)             = (BoolVal b :)
+interpret (PushNilTerm (F _ (S _ s)))    = (ListVal (last s) [] :)
+interpret (PushFuncTerm (F _ (S _ s)) f) = (FuncVal fty (interpret f) :)
+  where VFuncTy fty = last s
 
 main :: IO ()
 main =
@@ -28,7 +30,7 @@ main =
      case asl of
        Right term ->
          case typeInferenceOnEmpty term of
-           Right term' -> print (slickify term []) >> putStr " : " >> print (extract term') >> main
+           Right term' -> print (interpret term' []) >> putStr " : " >> print (extract term') >> main
            Left s      -> putStrLn s >> main
        Left s ->
          print s >> main
