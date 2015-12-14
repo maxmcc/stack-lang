@@ -3,8 +3,6 @@ module Testing where
 import qualified Data.Map as Map
 import Data.Either (isRight)
 
-import Debug.Trace
-
 import Test.QuickCheck
 import Test.HUnit
 
@@ -31,7 +29,7 @@ parsesTo :: String -> Term -> Test
 parsesTo s t =
   case parse s of
     Right t' -> t ~=? t'
-    Left _ -> False ~? "Should parse"
+    Left err -> False ~? show err
 
 noParse :: String -> Test
 noParse s =
@@ -83,6 +81,8 @@ testParseQuotes = "Parsing quotations (first-class functions)" ~: TestList
 
 -- tests for typechecker
 
+-- | Variable-independent comparison of two FuncTypes
+infix 4 ~:~
 (~:~) :: FuncType -> FuncType -> Bool
 f ~:~ g = fty == gty
   where Right (fty, _) = runTC $ freshen f
@@ -100,15 +100,15 @@ bool = VBoolTy
 
 testTypesBase :: Test
 testTypesBase = "Type inference for base types" ~: TestList
-  [ PushIntTerm 0 `hasType` F (S "A" []) (S "A" [int])
-  , PushIntTerm 100 `hasType` F (S "A" []) (S "A" [int])
-  , PushBoolTerm True `hasType` F (S "A" []) (S "A" [bool])
-  , PushBoolTerm False `hasType` F (S "A" []) (S "A" [bool])
+  [ PushIntTerm 0       `hasType` F (S "A" []) (S "A" [int])
+  , PushIntTerm 100     `hasType` F (S "A" []) (S "A" [int])
+  , PushBoolTerm True   `hasType` F (S "A" []) (S "A" [bool])
+  , PushBoolTerm False  `hasType` F (S "A" []) (S "A" [bool])
   ]
 
 testTypesBuiltin :: Test
 testTypesBuiltin = "Type inference for builtin functions" ~: TestList
-  [ BuiltinTerm "plus" `hasType` F (S "A" [int, int]) (S "A" [int])
+  [ BuiltinTerm "plus"  `hasType` F (S "A" [int, int]) (S "A" [int])
   , BuiltinTerm "minus" `hasType` F (S "A" [int, int]) (S "A" [int])
   , BuiltinTerm "times" `hasType` F (S "A" [int, int]) (S "A" [int])
   ]
@@ -132,23 +132,27 @@ instance Arbitrary Term where
     , (4, PushFuncTerm <$> arbitrary)
     ]
 
+  shrink (CatTerm t1 t2)  = [t1, t2]
+  shrink (PushFuncTerm t) = [t]
+  shrink _                = []
+
 -- Does the term have a type?
 wellTyped :: Term -> Bool
 wellTyped term = isRight $ typeInference term
 
 prop_quote :: Term -> Bool
 prop_quote term =
-  case typeInferenceOnEmpty term of
+  case typeInference term of
     Right ty ->
-      case typeInferenceOnEmpty (PushFuncTerm term) of
+      case typeInference (PushFuncTerm term) of
         Right ty' ->
           ty' ~:~ F (S "A" []) (S "A" [VFuncTy ty])
-        Left err -> traceShow err False
+        Left err -> False
     Left _ -> discard
 
 prop_wellTyped :: Term -> Bool
 prop_wellTyped term =
   case typeInferenceOnEmpty term of
-    Right ty -> True {- slickify term [] == slickify term [] -}
+    Right ty -> slickify term [] `seq` True
     Left _ -> discard
 

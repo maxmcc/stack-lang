@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
-{-# LANGUAGE GADTs, DataKinds, FlexibleInstances #-}
+{-# LANGUAGE GADTs, DataKinds, FlexibleInstances, TupleSections #-}
 
 module Inference where
 
@@ -9,8 +9,6 @@ import Builtin
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Maybe as Maybe
 import Text.Printf
 import Control.Monad.Writer
@@ -39,25 +37,25 @@ freshSVar =
 
 -- Functions to collect sets of variables appearing in types.
 
-collectSVars :: Stack -> Set TypeVariable
-collectSVars (S a s) = Set.unions $ Set.singleton a : map collectSVarsValue s
+collectSVars :: Stack -> [TypeVariable]
+collectSVars (S a s) = a : concatMap collectSVarsValue s
 
-collectSVarsValue :: ValueType -> Set TypeVariable
-collectSVarsValue VIntTy            = Set.empty
-collectSVarsValue VBoolTy           = Set.empty
+collectSVarsValue :: ValueType -> [TypeVariable]
+collectSVarsValue VIntTy            = []
+collectSVarsValue VBoolTy           = []
 collectSVarsValue (VListTy t)       = collectSVarsValue t
-collectSVarsValue (VFuncTy (F l r)) = collectSVars l `Set.union` collectSVars r
-collectSVarsValue (VVarTy _)        = Set.empty
+collectSVarsValue (VFuncTy (F l r)) = collectSVars l ++ collectSVars r
+collectSVarsValue (VVarTy _)        = []
 
-collectVVars :: ValueType -> Set TypeVariable
-collectVVars VIntTy            = Set.empty
-collectVVars VBoolTy           = Set.empty
+collectVVars :: ValueType -> [TypeVariable]
+collectVVars VIntTy            = []
+collectVVars VBoolTy           = []
 collectVVars (VListTy t)       = collectVVars t
-collectVVars (VFuncTy (F l r)) = collectVVarsStack l `Set.union` collectVVarsStack r
-collectVVars (VVarTy v)        = Set.singleton v
+collectVVars (VFuncTy (F l r)) = collectVVarsStack l ++ collectVVarsStack r
+collectVVars (VVarTy v)        = [v]
 
-collectVVarsStack :: Stack -> Set TypeVariable
-collectVVarsStack (S _ s) = Set.unions $ map collectVVars s
+collectVVarsStack :: Stack -> [TypeVariable]
+collectVVarsStack (S _ s) = concatMap collectVVars s
 
 -- Functions to walk through a type and perform substitution.
 
@@ -94,8 +92,8 @@ substValue ss vs t = substVVars vs (substSVarsValue ss t)
 
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
-  do let sVars = Set.toList $ collectSVars s `Set.union` collectSVars t
-         vVars = Set.toList $ collectVVarsStack s `Set.union` collectVVarsStack t
+  do let sVars = collectSVars s ++ collectSVars t
+         vVars = collectVVarsStack s ++ collectVVarsStack t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
      newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
      let s' = substStack (Map.fromList newSVars) (Map.fromList newVVars) s
@@ -189,14 +187,14 @@ mguValue _ _          = throwError "structural mismatch"
 stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
 stackVarAsgn a s
   | s == S a [] = return Map.empty
-  | a `Set.member` collectSVars s =
+  | a `elem` collectSVars s =
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
   | otherwise = return $ Map.singleton a s
 
 valueVarAsgn :: TypeVariable -> ValueType -> Either String VSubst
 valueVarAsgn a t
   | t == VVarTy a = return Map.empty
-  | a `Set.member` collectVVars t =
+  | a `elem` collectVVars t =
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show t
   | otherwise = return $ Map.singleton a t
 
@@ -227,3 +225,4 @@ typeInferenceOnEmpty term =
      if null s
        then return ty
        else throwError $ "term expecting a non-empty stack: " ++ show s
+
