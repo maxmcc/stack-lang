@@ -85,17 +85,21 @@ substVVars s t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v s)
 substVVarsStack :: VSubst -> Stack -> Stack
 substVVarsStack subst (S a s) = S a (map (substVVars subst) s)
 
+substStack :: SSubst -> VSubst -> Stack -> Stack
+substStack ss vs s = substVVarsStack vs (substSVars ss s)
+
+substValue :: SSubst -> VSubst -> ValueType -> ValueType
+substValue ss vs t = substVVars vs (substSVarsValue ss t)
+
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
   do let sVars = Set.toList $ collectSVars s `Set.union` collectSVars t
          vVars = Set.toList $ collectVVarsStack s `Set.union` collectVVarsStack t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
-     let s' = substSVars (Map.fromList newSVars) s
-     let t' = substSVars (Map.fromList newSVars) t
      newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
-     let s'' = substVVarsStack (Map.fromList newVVars) s'
-     let t'' = substVVarsStack (Map.fromList newVVars) t'
-     return $ F s'' t''
+     let s' = substStack (Map.fromList newSVars) (Map.fromList newVVars) s
+     let t' = substStack (Map.fromList newSVars) (Map.fromList newVVars) t
+     return $ F s' t'
 
 runTC :: TC a -> Either String (a, [SConstraint])
 runTC m = evalStateT (runWriterT m) 0
@@ -193,22 +197,22 @@ valueVarAsgn a t
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show t
   | otherwise = return $ Map.singleton a t
 
-solveStack :: SSubst -> [SConstraint] -> Either String (SSubst, [VConstraint])
-solveStack ss =
+solveStack :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, [VConstraint])
+solveStack ss vs =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
-          (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
+          (subst2, vcs2) <- runWriterT $ mguStack (substStack subst1 vs s) (substStack subst1 vs t)
           return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (ss, [])
 
-solveValue :: VSubst -> [VConstraint] -> Either String (VSubst, [SConstraint])
-solveValue vs =
+solveValue :: SSubst -> VSubst -> [VConstraint] -> Either String (VSubst, [SConstraint])
+solveValue ss vs =
   foldM (\(subst1, scs1) (VEqual t1 t2) -> do
-          (subst2, scs2) <- runWriterT $ mguValue (substVVars subst1 t1) (substVVars subst1 t2)
+          (subst2, scs2) <- runWriterT $ mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
           return (subst2 `afterVSubst` subst1, scs1 ++ scs2)) (vs, [])
 
 inferenceRound :: SSubst -> VSubst -> [SConstraint] -> Either String (SSubst, VSubst)
 inferenceRound ss vs scs =
-  do (ss', vcs) <- solveStack ss scs
-     (vs', scs') <- solveValue vs vcs
+  do (ss', vcs) <- solveStack ss vs scs
+     (vs', scs') <- solveValue ss' vs vcs
      if null scs'
        then return (ss', vs')
        else inferenceRound ss' vs' scs'
@@ -217,8 +221,8 @@ typeInference :: Term -> Either String FuncType
 typeInference term =
   do (F l r, scs) <- genConstraints term
      (ss, vs) <- inferenceRound Map.empty Map.empty scs
-     let l' = substVVarsStack vs (substSVars ss l)
-     let r' = substVVarsStack vs (substSVars ss r)
+     let l' = substStack ss vs l
+     let r' = substStack ss vs r
      return $ F l' r'
 
 typeInferenceOnEmpty :: Term -> Either String FuncType
