@@ -8,6 +8,8 @@ import Data.Either (isRight)
 import Test.HUnit
 import Test.QuickCheck
 
+import Debug.Trace
+
 import Language
 import Parser
 import Builtin
@@ -200,10 +202,10 @@ prop_id term =
 
 prop_quote :: Term () -> Bool
 prop_quote term =
-  case typeInference term of
+  case extract <$> typeInference term of
     Right ty ->
       case extract <$> typeInference (PushFuncTerm () term) of
-        Right ty' -> ty' ~:~ pushes [VFuncTy (extract ty)]
+        Right ty' -> ty' ~:~ pushes [VFuncTy ty]
         Left _    -> False
     Left _ -> discard
 
@@ -220,8 +222,7 @@ prop_concat :: Term () -> Term () -> Bool
 prop_concat term1 term2 =
   let ty1 = extract <$> typeInferenceOnEmpty term1
       ty2 = extract <$> typeInferenceOnEmpty term2
-   in
-  case (ty1, ty2) of
+   in case (ty1, ty2) of
     (Right (F a b), Right (F c d)) ->
       if b == c then
         case extract <$> typeInferenceOnEmpty (CatTerm () term1 term2) of
@@ -232,5 +233,23 @@ prop_concat term1 term2 =
 
 prop_wellTyped :: Term () -> Bool
 prop_wellTyped term =
-  undefined
+  case typeInferenceOnEmpty term of
+    Right typedTerm ->
+      let F _ (S _ exp) = extract typedTerm
+          resultStack = trace ("expected stack: " ++ show exp) $
+              interpret typedTerm []
+          resStackTy = stackType resultStack
+          resFunc = trace ("result stack type: " ++ show resStackTy) $
+              F (S "" []) resStackTy
+      in F (S "" []) (S "" exp) ~:~ resFunc
+    Left _ -> discard
+
+stackType :: [Value] -> Stack
+stackType = S "" . map valueType
+
+valueType :: Value -> ValueType
+valueType (IntVal _)    = VIntTy
+valueType (BoolVal _)   = VBoolTy
+valueType (ListVal t _) = t
+valueType (FuncVal t _) = VFuncTy t
 
