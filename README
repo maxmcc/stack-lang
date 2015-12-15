@@ -2,6 +2,14 @@ CIS 552 Project
 Meyer Kizner (mkizner), Max McCarthy (maxmcc)
 =============================================
 
+--------------------------------------------------------------------------------
+Compilation note: Our language contains a [fix] builtin term, whose
+implemenation in Haskell causes GHC to panic after running out of "simplifier
+tricks". However, GHCi is perfectly able to typecheck and interpret the entirety
+of our project. We would recommend loading the module Main and running [main]
+(our language's REPL) within GHCi.
+--------------------------------------------------------------------------------
+
 We implemented an interpreter and type inferencer for a stack-based programming
 language of our own design. Terms in this language manipulate an implicit stack;
 writing a simple value such as "2" pushes it to the stack, and builtins are
@@ -9,7 +17,7 @@ provided for basic manipulation of the stack, including popping values, swapping
 the top two values, and applying functions on the stack. The language is
 entirely point-free: there are no constructs for binding terms to variables.
 
-One of the simplest possible programs is
+One of the simplest possible programs is:
 
   2 3 plus
 
@@ -27,7 +35,7 @@ confident that our inference algorithm always terminates, which was not clear
 before!
 
 Our language is made Turing-complete by the inclusion of the [fix] builtin. One
-example of an infinitely-looping well-typed program is
+example of an infinitely-looping well-typed program is:
 
   false {apply1to1} fix
 
