@@ -132,14 +132,12 @@ freshSVar =
 
 -- Generates fresh variables for everything within a function type, recursively.
 freshen :: FuncType -> TC FuncType
-freshen (F s t) =
-  do let sVars = stackVars s ++ stackVars t
-         vVars = valueVars s ++ valueVars t
+freshen t =
+  do let sVars = stackVars t
+         vVars = valueVars t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
      newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
-     let s' = subst (Map.fromList newSVars) (Map.fromList newVVars) s
-     let t' = subst (Map.fromList newSVars) (Map.fromList newVVars) t
-     return $ F s' t'
+     return $ subst (Map.fromList newSVars) (Map.fromList newVVars) t
 
 runTC :: TC a -> Either String (a, [SConstraint])
 runTC m = evalStateT (runWriterT m) 0
