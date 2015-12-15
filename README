@@ -39,7 +39,7 @@ manipulate an implicit stack. This program can be found in the fact.stack file.
 
 The file Language.hs describes the values, abstract syntax, and types in our
 language. The Parsec-based parser is in Parser.hs; it produces an unannotated
-abstract syntax term from a string. The type inference logic is in Inference.hs. 
+abstract syntax term from a string. The type inference logic is in Inference.hs.
 It borrows heavily from the type inference lectures, but it is also heavily
 adapted to suit the needs of our language. Some significant refactoring effort
 resulted in the Substitutable type class in this file. There is an overall
