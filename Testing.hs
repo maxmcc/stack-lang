@@ -231,16 +231,14 @@ prop_concat term1 term2 =
       else discard
     _ -> discard
 
-prop_wellTyped :: Term () -> Bool
+prop_wellTyped :: Term () -> Property
 prop_wellTyped term =
   case typeInferenceOnEmpty term of
     Right typedTerm ->
       let F _ (S _ exp) = extract typedTerm
-          resultStack = trace ("expected stack: " ++ show exp) $
-              interpret typedTerm []
+          resultStack = reverse $ interpret typedTerm []
           resStackTy = stackType resultStack
-          resFunc = trace ("result stack type: " ++ show resStackTy) $
-              F (S "" []) resStackTy
+          resFunc = F (S "" []) resStackTy
       in F (S "" []) (S "" exp) ~:~ resFunc
     Left _ -> discard
 
@@ -250,6 +248,6 @@ stackType = S "" . map valueType
 valueType :: Value -> ValueType
 valueType (IntVal _)    = VIntTy
 valueType (BoolVal _)   = VBoolTy
-valueType (ListVal t _) = t
+valueType (ListVal t _) = VListTy t
 valueType (FuncVal t _) = VFuncTy t
 
