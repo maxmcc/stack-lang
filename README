@@ -43,7 +43,8 @@ One example of a useful function which makes use of [fix] is the recursive
 factorial function. This is perhaps the only non-trivial program we have
 attempted to write in the language. It illustrates well the difficulty in
 reasoning about a language with no variables and in which all operations
-manipulate an implicit stack. This program can be found in the fact.stack file.
+manipulate an implicit stack. This program can be found in the extra/fact.stack
+file.
 
 The file Language.hs describes the values, abstract syntax, and types in our
 language. The Parsec-based parser is in Parser.hs; it produces an unannotated
