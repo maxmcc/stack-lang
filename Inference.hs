@@ -64,20 +64,23 @@ type VSubst = Map TypeVariable ValueType
 substSVars :: SSubst -> Stack -> Stack
 substSVars subst (S a s) = stk
   where s' = map (substSVarsValue subst) s
-        stk = Maybe.maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s')) (Map.lookup a subst)
+        stk = Maybe.maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s'))
+                          (Map.lookup a subst)
 
 substSVarsValue :: SSubst -> ValueType -> ValueType
-substSVarsValue _ VIntTy       = VIntTy
-substSVarsValue _ VBoolTy      = VBoolTy
-substSVarsValue s (VListTy t)  = VListTy $ substSVarsValue s t
-substSVarsValue s (VFuncTy (F l r)) = VFuncTy $ F (substSVars s l) (substSVars s r)
-substSVarsValue _ t@(VVarTy _) = t
+substSVarsValue _ VIntTy            = VIntTy
+substSVarsValue _ VBoolTy           = VBoolTy
+substSVarsValue s (VListTy t)       = VListTy $ substSVarsValue s t
+substSVarsValue s (VFuncTy (F l r)) = VFuncTy $
+                                        F (substSVars s l) (substSVars s r)
+substSVarsValue _ t@(VVarTy _)      = t
 
 substVVars :: VSubst -> ValueType -> ValueType
 substVVars _ VIntTy            = VIntTy
 substVVars _ VBoolTy           = VBoolTy
 substVVars s (VListTy t)       = VListTy $ substVVars s t
-substVVars s (VFuncTy (F l r)) = VFuncTy $ F (substVVarsStack s l) (substVVarsStack s r)
+substVVars s (VFuncTy (F l r)) = VFuncTy $
+                                   F (substVVarsStack s l) (substVVarsStack s r)
 substVVars s t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v s)
 
 substVVarsStack :: VSubst -> Stack -> Stack
@@ -93,13 +96,22 @@ substFuncType :: SSubst -> VSubst -> FuncType -> FuncType
 substFuncType ss vs (F l r) = F (substStack ss vs l) (substStack ss vs r)
 
 substTerm :: SSubst -> VSubst -> Term FuncType -> Term FuncType
-substTerm ss vs (IdTerm ty) = IdTerm (substFuncType ss vs ty)
-substTerm ss vs (CatTerm ty t1 t2) = CatTerm (substFuncType ss vs ty) (substTerm ss vs t1) (substTerm ss vs t2)
-substTerm ss vs (BuiltinTerm ty s) = BuiltinTerm (substFuncType ss vs ty) s
-substTerm ss vs (PushIntTerm ty i) = PushIntTerm (substFuncType ss vs ty) i
+substTerm ss vs (IdTerm ty)         = IdTerm (substFuncType ss vs ty)
+substTerm ss vs (CatTerm ty t1 t2)  = CatTerm (substFuncType ss vs ty)
+                                              (substTerm ss vs t1)
+                                              (substTerm ss vs t2)
+substTerm ss vs (BuiltinTerm ty s)  = BuiltinTerm (substFuncType ss vs ty) s
+substTerm ss vs (PushIntTerm ty i)  = PushIntTerm (substFuncType ss vs ty) i
 substTerm ss vs (PushBoolTerm ty b) = PushBoolTerm (substFuncType ss vs ty) b
 substTerm ss vs (PushNilTerm ty)    = PushNilTerm (substFuncType ss vs ty)
-substTerm ss vs (PushFuncTerm ty t) = PushFuncTerm (substFuncType ss vs ty) (substTerm ss vs t)
+substTerm ss vs (PushFuncTerm ty t) = PushFuncTerm (substFuncType ss vs ty)
+                                                   (substTerm ss vs t)
+
+afterSSubst :: SSubst -> SSubst -> SSubst
+s1 `afterSSubst` s2 = Map.map (substSVars s1) s2 `Map.union` s1
+
+afterVSubst :: VSubst -> VSubst -> VSubst
+s1 `afterVSubst` s2 = Map.map (substVVars s1) s2 `Map.union` s1
 
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
@@ -176,12 +188,6 @@ genConstraints = runTC . inferType builtinTypes
 
 ---
 
-afterSSubst :: SSubst -> SSubst -> SSubst
-s1 `afterSSubst` s2 = Map.map (substSVars s1) s2 `Map.union` s1
-
-afterVSubst :: VSubst -> VSubst -> VSubst
-s1 `afterVSubst` s2 = Map.map (substVVars s1) s2 `Map.union` s1
-
 mguStack :: Stack -> Stack -> WriterT [VConstraint] (Either String) SSubst
 mguStack (S a s) (S b t) | length s < length t = mguStack (S b t) (S a s)
                          | otherwise =
@@ -195,9 +201,11 @@ mguValue (VListTy t1) (VListTy t2) = mguValue t1 t2
 mguValue (VFuncTy (F (S _ s) (S _ t))) (VFuncTy (F (S _ s') (S _ t'))) =
   if (length s, length t) == (length s', length t')
     then foldM (\vs (vt1, vt2) ->
-                 afterVSubst vs <$> mguValue (substVVars vs vt1) (substVVars vs vt2))
+                 afterVSubst vs <$>
+                 mguValue (substVVars vs vt1) (substVVars vs vt2))
                Map.empty (zip (s ++ t) (s' ++ t'))
-    else throwError $ printf "VFuncTy stacks mismatched: %s -> %s <> %s -> %s" (show s) (show t) (show s') (show t')
+    else throwError $ printf "VFuncTy stacks mismatched: %s -> %s <> %s -> %s"
+                             (show s) (show t) (show s') (show t')
 mguValue (VVarTy v) t = valueVarAsgn v t
 mguValue t (VVarTy v) = valueVarAsgn v t
 mguValue _ _          = throwError "structural mismatch"
@@ -219,7 +227,8 @@ valueVarAsgn a t
 solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
 solveStack =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
-          (subst2, vcs2) <- runWriterT $ mguStack (substSVars subst1 s) (substSVars subst1 t)
+          (subst2, vcs2) <- runWriterT $
+                            mguStack (substSVars subst1 s) (substSVars subst1 t)
           return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])
 
 solveValue :: SSubst -> [VConstraint] -> Either String VSubst

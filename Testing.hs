@@ -16,13 +16,17 @@ import Builtin
 import Inference
 import Main
 
-allTests :: IO ()
-allTests =
+quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
+quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n }
+
+main :: IO ()
+main =
   do _ <- runTestTT $ TestList [testParser, testTypes, testInterpret]
-     quickCheck prop_quote
-     quickCheck prop_quote
-     quickCheck prop_wellTyped
-     quickCheckWith (stdArgs { maxDiscardRatio=100000 }) prop_concat
+     quickCheckN 10000 prop_id
+     quickCheckN 10000 prop_quote
+     quickCheckN 10000 prop_associative
+     quickCheckN 1000  prop_concat
+     quickCheckN 10000 prop_wellTyped
 
 testParser :: Test
 testParser = TestList
@@ -231,7 +235,7 @@ prop_concat term1 term2 =
       else discard
     _ -> discard
 
-prop_wellTyped :: Term () -> Property
+prop_wellTyped :: Term () -> Bool
 prop_wellTyped term =
   case typeInferenceOnEmpty term of
     Right typedTerm ->
