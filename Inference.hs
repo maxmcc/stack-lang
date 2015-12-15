@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wall -fwarn-incomplete-patterns -fwarn-tabs #-}
-{-# LANGUAGE GADTs, DataKinds, FlexibleInstances, TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Inference where
 
@@ -14,80 +14,78 @@ import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Except
 
+
+-- Types and useful functions to express substitution.
+
 type TypeVariable = String
-
-
--- Functions to collect sets of variables appearing in types. At some point,
--- we made these into lists so that [freshen] would produce a canonical form,
--- for use in writing test cases.
-
-collectSVars :: Stack -> [TypeVariable]
-collectSVars (S a s) = a : concatMap collectSVarsValue s
-
-collectSVarsValue :: ValueType -> [TypeVariable]
-collectSVarsValue VIntTy            = []
-collectSVarsValue VBoolTy           = []
-collectSVarsValue (VListTy t)       = collectSVarsValue t
-collectSVarsValue (VFuncTy (F l r)) = collectSVars l ++ collectSVars r
-collectSVarsValue (VVarTy _)        = []
-
-collectVVars :: ValueType -> [TypeVariable]
-collectVVars VIntTy            = []
-collectVVars VBoolTy           = []
-collectVVars (VListTy t)       = collectVVars t
-collectVVars (VFuncTy (F l r)) = collectVVarsStack l ++ collectVVarsStack r
-collectVVars (VVarTy v)        = [v]
-
-collectVVarsStack :: Stack -> [TypeVariable]
-collectVVarsStack (S _ s) = concatMap collectVVars s
-
-
--- Functions to walk through a type and perform substitution.
 
 type SSubst = Map TypeVariable Stack
 type VSubst = Map TypeVariable ValueType
 
-substSVars :: SSubst -> Stack -> Stack
-substSVars subst (S a s) = stk
-  where s' = map (substSVarsValue subst) s
-        stk = Maybe.maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s'))
-                          (Map.lookup a subst)
-
-substSVarsValue :: SSubst -> ValueType -> ValueType
-substSVarsValue _ VIntTy            = VIntTy
-substSVarsValue _ VBoolTy           = VBoolTy
-substSVarsValue s (VListTy t)       = VListTy $ substSVarsValue s t
-substSVarsValue s (VFuncTy (F l r)) = VFuncTy $
-                                        F (substSVars s l) (substSVars s r)
-substSVarsValue _ t@(VVarTy _)      = t
-
-substVVars :: VSubst -> ValueType -> ValueType
-substVVars _ VIntTy            = VIntTy
-substVVars _ VBoolTy           = VBoolTy
-substVVars s (VListTy t)       = VListTy $ substVVars s t
-substVVars s (VFuncTy (F l r)) = VFuncTy $
-                                   F (substVVarsStack s l) (substVVarsStack s r)
-substVVars s t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v s)
-
-substVVarsStack :: VSubst -> Stack -> Stack
-substVVarsStack subst (S a s) = S a (map (substVVars subst) s)
-
-substStack :: SSubst -> VSubst -> Stack -> Stack
-substStack ss vs s = substVVarsStack vs (substSVars ss s)
-
-substValue :: SSubst -> VSubst -> ValueType -> ValueType
-substValue ss vs t = substVVars vs (substSVarsValue ss t)
-
-substFuncType :: SSubst -> VSubst -> FuncType -> FuncType
-substFuncType ss vs (F l r) = F (substStack ss vs l) (substStack ss vs r)
-
 -- Composes stack substitutions.
 afterSSubst :: SSubst -> SSubst -> SSubst
-s1 `afterSSubst` s2 = Map.map (substSVars s1) s2 `Map.union` s1
+s1 `afterSSubst` s2 = Map.map (stackSubst s1) s2 `Map.union` s1
 
 -- Composes value substitutions.
 afterVSubst :: VSubst -> VSubst -> VSubst
-s1 `afterVSubst` s2 = Map.map (substVVars s1) s2 `Map.union` s1
+s1 `afterVSubst` s2 = Map.map (valueSubst s1) s2 `Map.union` s1
+
+
+-- A type class for types in which we can substitute. There are instances for
+-- both [Stack] and [ValueType], which are mutually recursive; the substitution
+-- implementations are also mutually recursive.
+
+-- One may wonder why [stackVars] and [valueVars] return lists instead of types.
+-- This was so that [freshen], defined below, would actually return a "canonical
+-- freshening", which was useful for testing purposes.
+
+class Substitutable a where
+  stackVars :: a -> [TypeVariable]
+  valueVars :: a -> [TypeVariable]
+  stackSubst :: SSubst -> a -> a
+  valueSubst :: VSubst -> a -> a
+  subst :: SSubst -> VSubst -> a -> a
+  subst ss vs = valueSubst vs . stackSubst ss
+
+instance Substitutable Stack where
+  stackVars (S a s) = a : concatMap stackVars s
+  valueVars (S _ s) = concatMap valueVars s
+  stackSubst ss (S a s) = stk
+    where s' = map (stackSubst ss) s
+          stk = maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s'))
+                      (Map.lookup a ss)
+  valueSubst vs (S a s) = S a (map (valueSubst vs) s)
+
+instance Substitutable ValueType where
+  stackVars (VListTy t)       = stackVars t
+  stackVars (VFuncTy (F l r)) = stackVars l ++ stackVars r
+  stackVars _                 = []
+
+  valueVars VIntTy            = []
+  valueVars VBoolTy           = []
+  valueVars (VListTy t)       = valueVars t
+  valueVars (VFuncTy (F l r)) = valueVars l ++ valueVars r
+  valueVars (VVarTy v)        = [v]
+
+  stackSubst _ VIntTy             = VIntTy
+  stackSubst _ VBoolTy            = VBoolTy
+  stackSubst ss (VListTy t)       = VListTy $ stackSubst ss t
+  stackSubst ss (VFuncTy (F l r)) =
+    VFuncTy $ F (stackSubst ss l) (stackSubst ss r)
+  stackSubst _ t@(VVarTy _)       = t
+
+  valueSubst _ VIntTy             = VIntTy
+  valueSubst _ VBoolTy            = VBoolTy
+  valueSubst vs (VListTy t)       = VListTy $ valueSubst vs t
+  valueSubst vs (VFuncTy (F l r)) =
+    VFuncTy $ F (valueSubst vs l) (valueSubst vs r)
+  valueSubst vs t@(VVarTy v)      = Maybe.fromMaybe t (Map.lookup v vs)
+
+instance Substitutable FuncType where
+  stackVars (F l r) = stackVars l ++ stackVars r
+  valueVars (F l r) = valueVars l ++ valueVars r
+  stackSubst ss (F l r) = F (stackSubst ss l) (stackSubst ss r)
+  valueSubst vs (F l r) = F (valueSubst vs l) (valueSubst vs r)
 
 
 -- Constraints which may be placed on types. We may have a constraint that two
@@ -135,12 +133,12 @@ freshSVar =
 -- Generates fresh variables for everything within a function type, recursively.
 freshen :: FuncType -> TC FuncType
 freshen (F s t) =
-  do let sVars = collectSVars s ++ collectSVars t
-         vVars = collectVVarsStack s ++ collectVVarsStack t
+  do let sVars = stackVars s ++ stackVars t
+         vVars = valueVars s ++ valueVars t
      newSVars <- mapM (\v -> freshSVar >>= \v' -> return (v, S v' [])) sVars
      newVVars <- mapM (\v -> freshVVar >>= \v' -> return (v, VVarTy v')) vVars
-     let s' = substStack (Map.fromList newSVars) (Map.fromList newVVars) s
-     let t' = substStack (Map.fromList newSVars) (Map.fromList newVVars) t
+     let s' = subst (Map.fromList newSVars) (Map.fromList newVVars) s
+     let t' = subst (Map.fromList newSVars) (Map.fromList newVVars) t
      return $ F s' t'
 
 runTC :: TC a -> Either String (a, [SConstraint])
@@ -206,7 +204,7 @@ mguValue (VFuncTy (F (S _ s) (S _ t))) (VFuncTy (F (S _ s') (S _ t'))) =
   if (length s, length t) == (length s', length t')
     then foldM (\vs (vt1, vt2) ->
                  afterVSubst vs <$>
-                 mguValue (substVVars vs vt1) (substVVars vs vt2))
+                 mguValue (valueSubst vs vt1) (valueSubst vs vt2))
                Map.empty (zip (s ++ t) (s' ++ t'))
     else throwError $ printf "VFuncTy stacks mismatched: %s -> %s <> %s -> %s"
                              (show s) (show t) (show s') (show t')
@@ -217,14 +215,14 @@ mguValue _ _          = throwError "structural mismatch"
 stackVarAsgn :: TypeVariable -> Stack -> Either String SSubst
 stackVarAsgn a s
   | s == S a [] = return Map.empty
-  | a `elem` collectSVars s =
+  | a `elem` stackVars s =
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show s
   | otherwise = return $ Map.singleton a s
 
 valueVarAsgn :: TypeVariable -> ValueType -> Either String VSubst
 valueVarAsgn a t
   | t == VVarTy a = return Map.empty
-  | a `elem` collectVVars t =
+  | a `elem` valueVars t =
       throwError $ "occurs check fails: " ++ show a ++ " in " ++ show t
   | otherwise = return $ Map.singleton a t
 
@@ -232,13 +230,13 @@ solveStack :: [SConstraint] -> Either String (SSubst, [VConstraint])
 solveStack =
   foldM (\(subst1, vcs1) (SEqual s t) -> do
           (subst2, vcs2) <- runWriterT $
-                            mguStack (substSVars subst1 s) (substSVars subst1 t)
+                            mguStack (stackSubst subst1 s) (stackSubst subst1 t)
           return (subst2 `afterSSubst` subst1, vcs1 ++ vcs2)) (Map.empty, [])
 
 solveValue :: SSubst -> [VConstraint] -> Either String VSubst
 solveValue ss =
   foldM (\subst1 (VEqual t1 t2) -> do
-          subst2 <- mguValue (substValue ss subst1 t1) (substValue ss subst1 t2)
+          subst2 <- mguValue (subst ss subst1 t1) (subst ss subst1 t2)
           return $ subst2 `afterVSubst` subst1) Map.empty
 
 
@@ -251,7 +249,7 @@ typeInference t =
   do (t', scs) <- genConstraints t
      (ss, vcs) <- solveStack scs
      vs <- solveValue ss vcs
-     return $ fmap (substFuncType ss vs) t'
+     return $ fmap (subst ss vs) t'
 
 -- Performs type inference with the additional constraint that the resulting
 -- term must be executable on an empty stack.
