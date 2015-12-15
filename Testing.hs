@@ -5,7 +5,7 @@ module Testing where
 import qualified Data.Map as Map
 import Data.Either (isRight)
 
-import Test.HUnit
+import Test.HUnit hiding (Testable)
 import Test.QuickCheck
 
 import Debug.Trace
@@ -16,7 +16,7 @@ import Builtin
 import Inference
 import Main
 
-quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
+quickCheckN :: Testable prop => Int -> prop -> IO ()
 quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n }
 
 main :: IO ()
@@ -29,16 +29,14 @@ main =
      quickCheckN 10000 prop_wellTyped
 
 testParser :: Test
-testParser = TestList
-  [testParseEmpty, testParseBuiltin, testParseQuotes]
+testParser = TestList [testParseEmpty, testParseBuiltin, testParseQuotes]
 
 testTypes :: Test
-testTypes = TestList
-  [testTypesBase, testTypesBuiltin,
-   testTypesQuotes, testTypesConcat]
+testTypes = TestList [testTypesBase, testTypesBuiltin,
+                      testTypesQuotes, testTypesConcat]
 
 testInterpret :: Test
-testInterpret = TestList []
+testInterpret = TestList [testInterpretBase, testInterpretConcat]
 
 
 -- Tests for parser
@@ -99,7 +97,7 @@ testParseQuotes = "Parsing quotations (first-class functions)" ~: TestList
 
 -- Tests for type inference
 
--- | Variable-independent comparison of two FuncTypes
+-- Variable-independent comparison of two FuncTypes
 infix 4 ~:~
 (~:~) :: FuncType -> FuncType -> Bool
 f ~:~ g = fty == gty
@@ -176,6 +174,50 @@ testTypesConcat = "Type inference for term concatentation" ~: TestList
   ]
 
 
+-- Tests for interpreter
+
+evalsTo :: Term () -> [Value] -> Test
+term `evalsTo` expectedValues =
+  case typeInference term of
+    Right typedTerm ->
+      let actualValues = reverse $ interpret typedTerm [] in
+      (length expectedValues == length actualValues
+        && valuesEqual actualValues expectedValues) ~?= True
+    Left _ -> False ~? "Should be equal"
+
+testInterpretBase :: Test
+testInterpretBase = "Interpret base values" ~: TestList
+  [ PushIntTerm () 0      `evalsTo` [IntVal 0]
+  , PushIntTerm () 100    `evalsTo` [IntVal 100]
+  , PushBoolTerm () False `evalsTo` [BoolVal False]
+  , PushBoolTerm () True  `evalsTo` [BoolVal True]
+  ]
+
+push3, push5, pushf :: Term ()
+push3 = PushIntTerm () 3
+push5 = PushIntTerm () 5
+pusht = PushBoolTerm () True
+pushf = PushBoolTerm () False
+
+testInterpretConcat :: Test
+testInterpretConcat = "Interpret term concatentation" ~: TestList
+  [ CatTerm () (IdTerm ()) (IdTerm ()) `evalsTo` []
+  , CatTerm () (IdTerm ()) push5 `evalsTo` [IntVal 5]
+  , CatTerm () push5 push3 `evalsTo` [IntVal 5, IntVal 3]
+  , CatTerm () pushf push3 `evalsTo` [BoolVal False, IntVal 3]
+  , CatTerm () (CatTerm () push5 push3) push5 `evalsTo`
+      [IntVal 5, IntVal 3, IntVal 5]
+  , CatTerm () (CatTerm () push3 pushf) (CatTerm () pusht push5) `evalsTo`
+      [IntVal 3, BoolVal False, BoolVal True, IntVal 5]
+  , CatTerm () (CatTerm () (CatTerm () push3 push5) push3) pusht `evalsTo`
+      [IntVal 3, IntVal 5, IntVal 3, BoolVal True]
+  , CatTerm () (CatTerm () push3 push5)
+               (CatTerm () (PushFuncTerm () (BuiltinTerm () "plus"))
+                           (BuiltinTerm () "apply2to1"))
+      `evalsTo` [IntVal 8]
+  ]
+
+
 -- QuickCheck properties for type inference
 
 instance Arbitrary (Term ()) where
@@ -191,7 +233,6 @@ instance Arbitrary (Term ()) where
   shrink (CatTerm () t1 t2)  = [t1, t2]
   shrink (PushFuncTerm () t) = [t]
   shrink _                   = []
-
 
 prop_id :: Term () -> Bool
 prop_id term =
@@ -254,4 +295,13 @@ valueType (IntVal _)    = VIntTy
 valueType (BoolVal _)   = VBoolTy
 valueType (ListVal t _) = VListTy t
 valueType (FuncVal t _) = VFuncTy t
+
+valueEqual :: Value -> Value -> Bool
+valueEqual (IntVal i1)  (IntVal i2)      = i1 == i2
+valueEqual (BoolVal b1) (BoolVal b2)     = b1 == b2
+valueEqual (ListVal _ l1) (ListVal _ l2) = valuesEqual l1 l2
+valueEqual (FuncVal _ _) (FuncVal _ _)   = error "Can't equate functions"
+
+valuesEqual :: [Value] -> [Value] -> Bool
+valuesEqual = (and .) . zipWith valueEqual
 
