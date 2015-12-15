@@ -5,7 +5,7 @@ Meyer Kizner (mkizner), Max McCarthy (maxmcc)
 --------------------------------------------------------------------------------
 Compilation note: Our language contains a [fix] builtin term, whose
 implemenation in Haskell causes GHC to panic after running out of "simplifier
-tricks". However, GHCi is perfectly able to typecheck and interpret the entirety
+ticks". However, GHCi is perfectly able to typecheck and interpret the entirety
 of our project. We would recommend loading the module Main and running [main]
 (our language's REPL) within GHCi.
 --------------------------------------------------------------------------------
