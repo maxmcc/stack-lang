@@ -6,7 +6,8 @@ We implemented an interpreter and type inferencer for a stack-based programming
 language of our own design. Terms in this language manipulate an implicit stack;
 writing a simple value such as "2" pushes it to the stack, and builtins are
 provided for basic manipulation of the stack, including popping values, swapping
-the top two values, and applying functions on the stack.
+the top two values, and applying functions on the stack. The language is
+entirely point-free: there are no constructs for binding terms to variables.
 
 One of the simplest possible programs is
 
@@ -15,13 +16,34 @@ One of the simplest possible programs is
 It could also be written by pushing the "plus" function to the stack in a
 quotation, like so:
 
-  2 3 {plus} apply
+  2 3 {plus} apply2to1
 
-The files Terms.hs and Types.hs describe our language and the abstract syntax
-we eventually adopted. The type inference logic is in Inference.hs; it borrows
-heavily from the type inference lectures, but it is also heavily adapted to suit
-the needs of our language. The parser is in Parser.hs, and the main interpreter
-is a REPL in Main.hs. Our unit tests and QuickCheck properties can be found in
-Testing.hs. Finally, Builtin.hs defines built-in values and their types. This is
-roughly the order in which one might read through this project.
+We require that the function argument type in the type of a higher-order
+function agrees exactly with the function type it is applied to, in order to
+rule out certain ill-formed terms. This requires us to constrain the arity of
+our higher-order builtins; we have written 1to1, 2to1, and 2to2 versions of each
+of [apply] and [dip]. This constraint in our type system also makes us much more
+confident that our inference algorithm always terminates, which was not clear
+before!
+
+Our language is made Turing-complete by the inclusion of the [fix] builtin. One
+example of an infinitely-looping well-typed program is
+
+  false {apply1to1} fix
+
+One example of a useful function which makes use of [fix] is the recursive
+factorial function. This is perhaps the only non-trivial program we have
+attempted to write in the language. It illustrates well the difficulty in
+reasoning about a language with no variables and in which all operations
+manipulate an implicit stack. This program can be found in the fact.stack file.
+
+The file Language.hs describes the values, abstract syntax, and types in our
+language. The Parsec-based parser is in Parser.hs; it produces an unannotated
+abstract syntax term from a string. The type inference logic is in Inference.hs. 
+It borrows heavily from the type inference lectures, but it is also heavily
+adapted to suit the needs of our language. Some significant refactoring effort
+resulted in the Substitutable type class in this file. There is an overall
+interpreter and REPL in Main.hs. Our unit tests and QuickCheck properties can
+be found in Testing.hs. Finally, Builtin.hs defines built-in values and their
+types. This is roughly the order in which one might read through this project.
 

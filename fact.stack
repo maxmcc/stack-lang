@@ -1,0 +1,1 @@
+5 {swap dup {swap dup 1 minus {swap} dip2to2 swap apply1to1 times} swap {pop pop 1} swap 0 equal if {swap} dip2to2 apply2to1} fix
