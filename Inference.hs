@@ -52,6 +52,7 @@ instance Substitutable Stack where
   valueVars (S _ s) = concatMap valueVars s
   stackSubst ss (S a s) = stk
     where s' = map (stackSubst ss) s
+    -- if there is a mapping, treat it as a prefix of the other stack
           stk = maybe (S a s') (\(S a' s'') -> S a' (s'' ++ s'))
                       (Map.lookup a ss)
   valueSubst vs (S a s) = S a (map (valueSubst vs) s)
@@ -188,6 +189,10 @@ genConstraints = runTC . inferType builtinTypes
 -- Functions to compute the most general unifiers of two stacks and of two value
 -- types. This allows us to solve the generated constraints.
 
+-- This is a little non-obvious. When we do a stack variable assignment, we are
+-- constraining one stack variable to be equal to the prefix of another stack.
+-- So we have to strip off the common suffix of the two stacks before generating
+-- the constraint.
 mguStack :: Stack -> Stack -> WriterT [VConstraint] (Either String) SSubst
 mguStack (S a s) (S b t) | length s < length t = mguStack (S b t) (S a s)
                          | otherwise =
